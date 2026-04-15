@@ -4,6 +4,7 @@ __pycache__/
 
 # Large binary data (download via pipeline)
 data/agera5_catalonia/
+data/agera5_daily_catalonia.csv
 data/srtm/
 data/dem_catalonia.tif
 data/*.xlsx
