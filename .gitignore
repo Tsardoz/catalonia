@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+
+# Large binary data (download via pipeline)
+data/agera5_catalonia/
+data/srtm/
+data/dem_catalonia.tif
+data/*.xlsx
