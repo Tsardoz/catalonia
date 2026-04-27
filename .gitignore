@@ -5,7 +5,25 @@ __pycache__/
 # Large binary data (download via pipeline)
 data/agera5_catalonia/
 data/agera5_daily_catalonia.csv
+data/agera5_daily_catalonia_elevcor.csv
+data/agera5_daily_catalonia_oliveweighted.csv
+data/agera5_daily_catalonia_oliveweighted_elevcor.csv
 data/agera5_daily_olive_farms.csv
 data/srtm/
 data/dem_catalonia.tif
 data/*.xlsx
+data/download_agera5.log
+
+# Raw DUN parcel registry (1.5 GB, fetched separately)
+data/dun/olives.csv
+data/dun/raw/
+
+# Cached map overlays (regenerable)
+data/osm/
+data/ne/
+
+# Reference PDFs (not part of the pipeline)
+data/pdfs/
+
+# Archived large outputs from the old farm-level pipeline (>100 MB, exceeds GitHub limit)
+archive/data/weighted/agera5_daily_olive_farms.csv

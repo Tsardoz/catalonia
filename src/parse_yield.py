@@ -39,6 +39,7 @@ TARGET_CROPS = {
     "Platerina":                    ("Flat nectarine",         "stone_fruit"),
     "Cirerer i guinder":            ("Cherry and sour cherry", "stone_fruit"),
     "Ametller":                     ("Almond",                 "nut"),
+    "Ametlla (closca)":             ("Almond",                 "nut"),   # 2016-2018 name variant
     "Avellaner":                    ("Hazelnut",               "nut"),
     "Noguera":                      ("Walnut",                 "nut"),
     "Vinya de raïm per a vi":       ("Wine grape",             "vine"),
@@ -62,6 +63,7 @@ COMARCA_NORMALISE = {
 PHENO_KEY_OVERRIDES = {
     "Cirerer i guinder": "cherry",
     "Ametller":          "almond",
+    "Ametlla (closca)":  "almond",
     "Albercoquer":       "apricot",
     "Noguera":           "walnut",
     "Avellaner":         "hazelnut",

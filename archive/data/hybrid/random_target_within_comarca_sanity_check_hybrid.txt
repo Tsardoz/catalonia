@@ -1,0 +1,71 @@
+=== WITHIN-COMARCA RANDOM TARGET SANITY CHECK (hybrid daily climate) ===
+n_permutations=40
+dataset_rows=320 comarques=36 years=2016-2024
+completed 10/40 permutations
+completed 20/40 permutations
+completed 30/40 permutations
+completed 40/40 permutations
+
+## MODEL: precip
+
+[ols] real metrics
+{'r2': 0.5945663095408414, 'adj_r2': 0.5227551761753816, 'raw_sig': 5, 'bh_sig': 4, 'min_p': 6.229395302604173e-14}
+permutation summary:
+             mean    median       q95
+r2       0.396206  0.395951  0.418613
+adj_r2   0.289261  0.288960  0.315636
+raw_sig  0.575000  0.000000  3.050000
+bh_sig   0.000000  0.000000  0.000000
+min_p    0.132207  0.077094  0.428620
+empirical_p_ge(r2)=0.000
+empirical_p_ge(adj_r2)=0.000
+empirical_p_ge(raw_sig)=0.000
+empirical_p_ge(bh_sig)=0.000
+empirical_p_ge(min_p)=1.000
+
+[enet] real metrics
+{'train_r2': 0.5590357937781032, 'cv_r2': 0.27463725334210565, 'nonzero': 11, 'alpha': 0.00905393816558054, 'l1_ratio': 0.1}
+permutation summary:
+              mean    median        q95
+train_r2  0.121048  0.000000   0.380440
+cv_r2    -0.014218 -0.017132   0.004016
+nonzero   4.475000  0.000000  13.000000
+alpha     0.303744  0.413516   0.628817
+l1_ratio  0.221250  0.100000   0.990000
+empirical_p_ge(train_r2)=0.000
+empirical_p_ge(cv_r2)=0.000
+empirical_p_ge(nonzero)=0.325
+empirical_p_ge(alpha)=0.800
+empirical_p_ge(l1_ratio)=1.000
+
+## MODEL: vmax
+
+[ols] real metrics
+{'r2': 0.5883799208214933, 'adj_r2': 0.5154730433286212, 'raw_sig': 4, 'bh_sig': 2, 'min_p': 2.5736566778586772e-09}
+permutation summary:
+             mean    median       q95
+r2       0.394251  0.392663  0.411089
+adj_r2   0.286960  0.285091  0.306780
+raw_sig  0.650000  0.000000  2.050000
+bh_sig   0.075000  0.000000  0.000000
+min_p    0.100684  0.059393  0.338964
+empirical_p_ge(r2)=0.000
+empirical_p_ge(adj_r2)=0.000
+empirical_p_ge(raw_sig)=0.000
+empirical_p_ge(bh_sig)=0.025
+empirical_p_ge(min_p)=1.000
+
+[enet] real metrics
+{'train_r2': 0.524675600859735, 'cv_r2': 0.20327764708136398, 'nonzero': 13, 'alpha': 0.002971910582434649, 'l1_ratio': 0.99}
+permutation summary:
+              mean    median        q95
+train_r2  0.202751  0.161062   0.364184
+cv_r2     0.092812  0.090531   0.130403
+nonzero   8.900000  9.000000  13.000000
+alpha     0.063636  0.052823   0.148140
+l1_ratio  0.473750  0.100000   0.990000
+empirical_p_ge(train_r2)=0.000
+empirical_p_ge(cv_r2)=0.000
+empirical_p_ge(nonzero)=0.075
+empirical_p_ge(alpha)=0.900
+empirical_p_ge(l1_ratio)=0.375

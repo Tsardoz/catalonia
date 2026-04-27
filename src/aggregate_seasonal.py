@@ -87,9 +87,12 @@ PHENO_WINDOWS = {
         "veraison_harvest":   [8, 9],
     },
     "olive": {
-        "flower":      [5, 6],
-        "fruit_set":   [7, 8],
-        "maturation":  [9, 10, 11],
+        # Sensitive Period 1 (SP1): Flowering to pit hardening (DOY 95-157 ≈ Apr 5 - Jun 6)
+        "sp1_flower_hardening":  [4, 5, 6],  # April-June (includes DOY 95-157)
+        # Normal Period (NP): Pit hardening (DOY 153-217 ≈ Jun 2 - Aug 5)
+        "np_pit_hardening":      [6, 7],     # June-July (includes DOY 153-217)
+        # Sensitive Period 2 (SP2): Oil synthesis to harvest (DOY 216-313 ≈ Aug 4 - Nov 9)
+        "sp2_oil_synthesis":     [8, 9, 10, 11],  # August-November (includes DOY 216-313)
     },
     "other": {
         "season":      [4, 5, 6, 7, 8, 9],

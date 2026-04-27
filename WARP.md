@@ -361,6 +361,20 @@ Formatting:
 
 ---
 
+## Olive-Area-Weighted Climate Aggregation
+
+For olive-specific analysis the unweighted comarca mean from `extract_climate.py` is
+replaced by an area-weighted aggregator that uses DUN olive area per AgERA5 cell as
+weights. Pipeline: `src/extract_climate_olive_weighted.py` →
+`data/agera5_daily_catalonia_oliveweighted.csv` (131,508 rows, 36 olive comarques).
+Residual elevation correction is available via `src/elevation_correction.py
+--olive-weighted --apply` but is mostly redundant once cell weights are applied.
+
+See `PLAN.md` for the analytical impact (sliding-window OLS comparison, residual `dT_C`
+table, peak-window timing) and the current recommended workflow for olive analysis.
+
+---
+
 ## Known Limitations
 
 - ERA5/AgERA5 comarca centroids do not represent rainfed parcel conditions — rainfed tree
@@ -389,7 +403,12 @@ Formatting:
 | `data/catalan_woody_yield_raw.csv` | Parsed, filtered, rainfed-only yield data |
 | `data/comarca_centroids.csv` | Comarca name, lat, lon |
 | `data/comarca_polygons.gpkg` | Comarca polygon boundaries (GeoPackage) |
-| `data/agera5_daily_catalonia.csv` | Daily AgERA5 weather per comarca (spatial mean/min/max) |
+| `data/agera5_daily_catalonia.csv` | Daily AgERA5 weather per comarca (unweighted spatial mean/min/max) |
+| `data/agera5_daily_catalonia_elevcor.csv` | + uniform lapse-rate corrected `*_elevcor` columns |
+| `data/agera5_daily_catalonia_oliveweighted.csv` | Daily AgERA5 per comarca, mean weighted by DUN olive area per cell (36 olive comarques) |
+| `data/agera5_daily_catalonia_oliveweighted_elevcor.csv` | + residual lapse-rate `*_elevcor` columns on top of olive-weighted file |
+| `data/comarca_olive_elevation_correction.csv` | Per-comarca lapse offset (unweighted z_climate) |
+| `data/comarca_olive_elevation_correction_oliveweighted.csv` | Per-comarca residual lapse offset (olive-area-weighted z_climate) |
 | `data/agera5_seasonal_catalonia.csv` | Seasonal aggregates per comarca × crop × year |
 | `data/catalan_woody_yield_climate.csv` | Final joined dataset |
 | `data/olive_groves_catalonia.gpkg` | Olive farm polygons with elevation, grid matching, corrected temperatures |
