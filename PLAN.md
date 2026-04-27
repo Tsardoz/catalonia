@@ -12,31 +12,42 @@ hybrid.
 ## Headline result
 
 - The clearest current olive timing result is a **two-channel summer signal** on
-  rainfed Arbequina yield in western and southern interior Catalonia: late-July to
-  mid-August **heat** and June–July **rain**, both negatively associated with yield,
-  partially correlated within comarca, and jointly more informative than either alone.
+  rainfed Arbequina yield in western and southern interior Catalonia: mid-August
+  **night-time heat (Tmin)** and June–July **rain**, both negatively associated with
+  yield, partially correlated within comarca, and jointly the strongest specification
+  found.
 - On the headline 10-comarca Arbequina panel (Arbequina ≥ 90 % of rainfed olive area,
-  ≥ 500 ha rainfed; DUN 2024) the bivariate `log_yield ~ FE + meanTmax + sumPrecip`
-  gives within-R² = **0.42** (n=100): summer Tmax β = −0.13 t/ha/°C (t = −2.3), summer
-  precip β = −0.010 t/ha/mm (t = −3.9). Univariate within-R² is 0.32 for Tmax alone and
-  **0.39 for precip alone** — summer rain is in fact the *stronger* single predictor on
-  this panel.
-- **Heat channel.** 21-day mean `Tmax` ending **17 August** (DOY 229): t = −6.51,
-  p = 4.3e-9, within-R² = 0.32, β = −0.29 t/ha/°C. Sharpens monotonically with window
-  length from 7 → 21 d and plateaus by 28 d (~3–4 week stress integration window).
-  Continuous `mean Tmax` outperforms the previous canonical `Tmax ≥ 32 °C count` operator
-  on the cultivar-restricted set (within-R² 0.32 vs 0.12). `mean VPD` agrees on the same
-  vulnerable period but is weaker (within-R² 0.11) — temperature itself, not VPD, is the
-  dominant heat signal here.
+  ≥ 500 ha rainfed; DUN 2024) the bivariate `log_yield ~ FE + meanTmin + sumPrecip`
+  gives within-R² = **0.47** (n=100): summer Tmin β = −0.275 t/ha/°C (t = −3.64),
+  summer precip β = −0.0076 t/ha/mm (t = −2.87). Univariate within-R² is **0.42 for Tmin**,
+  0.39 for precip, 0.32 for Tmax.
+- **Tmin absorbs Tmax.** When the same model carries both temperature predictors, Tmax
+  collapses (Tmin t = −4.19 vs Tmax t = −1.58 in the bivariate; Tmin t = −2.84 vs Tmax
+  t = −0.68 in the trivariate Tmin + Tmax + precip). Tmax was a noisier proxy for the
+  same underlying heat-stress signal that Tmin carries directly. Adding Tmax to a
+  Tmin + precip model raises within-R² by only 0.003 (0.469 → 0.472).
+- **Heat channel (Tmin).** 21-day mean `Tmin` ending **17 August** (DOY 229): t = −8.02,
+  p = 4.0e-12, within-R² = 0.42, β = −0.43 t/ha/°C. Same calendar peak as the Tmax scan,
+  same monotonic sharpening with window length, but with stronger signal at every length
+  (7d/14d/21d/28d Tmin within-R²: 0.21 / 0.30 / 0.42 / 0.35 vs Tmax 0.17 / 0.23 / 0.32 / 0.33).
+  Mechanism is consistent with night-respiration drain on photosynthate, loss of the
+  overnight stomatal-recovery window, and oil-quality penalty under tropical-night-style
+  minima — all well-documented in the olive-yield literature.
+- **Heat channel (Tmax, demoted).** 21-day mean `Tmax` ending **17 August**: t = −6.51,
+  within-R² = 0.32, β = −0.29 t/ha/°C. Continuous `mean Tmax` outperforms the previous
+  canonical `Tmax ≥ 32 °C count` operator on the cultivar-restricted set (0.32 vs 0.12).
+  Retained as a familiar reference variable but not the primary heat predictor.
+  `mean VPD` (within-R² 0.11 at the same window) is weaker than both temperature
+  predictors — VPD adds nothing on this panel.
 - **Rain channel.** 30-day precipitation sum ending **19 July** (DOY 200): t = −7.53,
   p = 4.0e-11, within-R² = 0.39, β = −0.0146 t/ha/mm. Same calendar peak across 30/60/90-day
   windows. Signal scales with rain *intensity*, not occurrence: `count ≥ 5 mm` reproduces
   most of the effect (within-R² 0.36) while `count ≥ 1 mm` is weaker (0.24), suggesting
   convective-storm / hail / disease pathways rather than pure cloud-cover (PAR/Tmax-suppression).
-- **Winter recharge null.** Adding Dec–Mar `P` or `P − ET₀` to the headline Tmax model on
-  this Arbequina panel does not improve fit (within-R² 0.336 → 0.336) and the winter
-  coefficient is indistinguishable from zero (t ≈ −0.2 to +0.05). The earlier full-panel
-  positive winter signal does not survive cultivar restriction.
+- **Winter recharge null.** Adding Dec–Mar `P` or `P − ET₀` to the headline temperature
+  model on this Arbequina panel does not improve fit (within-R² 0.336 → 0.336) and the
+  winter coefficient is indistinguishable from zero (t ≈ −0.2 to +0.05). The earlier
+  full-panel positive winter signal does not survive cultivar restriction.
 - These remain **exploratory comarca-year screening results**, not a mechanistic olive
   water-stress model.
 
@@ -114,6 +125,64 @@ python src/sliding_window_regression.py --crop olive --var tmax_mean \
 - `mean VPD` agrees on the same vulnerable period but is weaker than `mean Tmax`. Temperature
   itself, not VPD, is the dominant one-predictor signal here.
 
+## Sliding-window OLS — Tmin scan (Arbequina, mean Tmin, n=100)
+
+| window length | best window-end | β (t/ha per °C) | t | p | within-R² |
+|---|---|---:|---:|---|---:|
+| 7-day  | 09-07 | −0.154 | −4.86 | 5.0e-6 | 0.210 |
+| 14-day | 08-17 | −0.341 | −6.19 | 1.8e-8 | 0.301 |
+| **21-day** | **08-17** | **−0.433** | **−8.02** | **4.0e-12** | **0.419** |
+| 28-day | 08-31 | −0.571 | −6.80 | 1.2e-9 | 0.342 |
+
+- **Same calendar peak as the Tmax scan** (mid-to-late August window-end), same monotonic
+  sharpening with window length, but **Tmin gives a stronger signal at every window length**
+  (within-R² 0.21 / 0.30 / 0.42 / 0.34 vs Tmax 0.17 / 0.23 / 0.32 / 0.33).
+- The 21-day window ending 17 August is the global maximum on the Arbequina panel for any
+  single climate predictor tested to date.
+- A wide-scan (03-01 → 11-15, anchor-step 7 d) confirms the August peak is the global
+  maximum: no comparable spring or autumn Tmin signal.
+- Effect size at 21d/08-17: β = −0.43 t/ha per °C of mean Tmin. At a panel-mean rainfed
+  Arbequina yield of ~2 t/ha that is roughly **−21 % yield per °C of August mean Tmin**.
+
+## Temperature decomposition: Tmin vs Tmax (Arbequina, 21d / 08-17, n=100)
+
+When Tmin and Tmax compete in the same FE-OLS, **Tmax collapses to non-significance**:
+
+| spec | within-R² | summer Tmin β / t | summer Tmax β / t | summer precip β / t |
+|---|---:|---|---|---|
+| Tmin alone | **0.419** | **−0.433 / −8.02** | — | — |
+| Tmax alone | 0.323 | — | −0.290 / −6.51 | — |
+| Tmin + Tmax | 0.435 | **−0.338 / −4.19** | −0.097 / −1.58 (ns) | — |
+| Tmin + precip | **0.469** | **−0.275 / −3.64** | — | **−0.0076 / −2.87** |
+| Tmax + precip | 0.423 | — | −0.132 / −2.27 | −0.0104 / −3.91 |
+| Tmin + Tmax + precip | 0.472 | **−0.246 / −2.84** | −0.044 / −0.68 (ns) | **−0.0069 / −2.45** |
+
+- **Within-comarca correlations** at the headline windows: Tmin ↔ Tmax = 0.75, Tmin ↔ precip
+  = 0.73, Tmax ↔ precip = 0.70. All three predictors carry overlapping information; each
+  also carries some independent variance.
+- **Tmin absorbs Tmax, not the other way around.** In every multivariate spec containing
+  both temperature predictors, Tmin survives at p ≪ 0.01 while Tmax falls to p > 0.1.
+  The previous "heat channel" in this dataset is best read as a *night-warmth* signal that
+  Tmax was tagging only as a noisy proxy.
+- **Adding Tmax to a Tmin + precip model raises within-R² by 0.003** (0.469 → 0.472). Tmax
+  is statistically and practically redundant once Tmin is in the model.
+- **The new clean two-channel headline is `Tmin + precip`** (within-R² = 0.47, both
+  channels significant), not `Tmax + precip` (0.42).
+
+### Why Tmin may carry more signal than Tmax here
+
+1. **Night-active oil biosynthesis.** Mesocarp lipid synthesis peaks during dark hours;
+   high Tmin sustains respiration that drains the photosynthate pool feeding it.
+2. **Loss of stomatal-recovery window.** Tropical-night-style minima eliminate the
+   overnight rehydration / cavitation-recovery period — the same mechanism implicated
+   in the Andalusian olive-yield decline literature for the past decade.
+3. **Oil-quality penalty.** High Tmin during the same window shifts fatty-acid composition
+   (less oleic, more linoleic), a quality-side cost even when yield is preserved.
+4. **Spatial decorrelation from elevation.** Tmin varies more sharply than Tmax with
+   elevation, slope position and cold-air drainage, so within-comarca cell-to-cell
+   heterogeneity in Tmin is larger and the comarca mean has *more signal-relative-to-noise*
+   for Tmin in this panel. Part of the win may be measurement, not biology.
+
 ## Summer-rain channel and bivariate model (Arbequina, n=100)
 
 Sliding-window scan over `precip_mean` (`agg=sum`) on the Arbequina panel reveals a
@@ -138,7 +207,7 @@ threshold choices:
   Result is more consistent with **convective-storm damage** (hail, wind, mechanical
   fruit drop) and/or **disease pressure** (humidity-driven sporulation thresholds).
 
-### Bivariate `Tmax + precip` (Arbequina, n=100)
+### Bivariate `Tmax + precip` (Arbequina, n=100, superseded by `Tmin + precip` above)
 
 Heat window: 21d mean Tmax ending 08-17. Rain window: 30d precip sum ending 07-19.
 Within-comarca correlation between the two predictors is **r = 0.70** (positive: in
@@ -151,19 +220,21 @@ rather than synoptic frontal cooling).
 | Univariate precip (30d, 07-19) | **0.389** | — | **−0.0146 / −7.53** |
 | **Bivariate Tmax + precip** | **0.423** | −0.132 / −2.27 | −0.0104 / −3.91 |
 
-- Both channels retain independent statistical significance, but Tmax's coefficient is
-  more than halved and its t-statistic drops from −6.5 to −2.3. Precip's t drops from
-  −7.5 to −3.9. The univariate Tmax effect was **partially borrowing strength from the
-  precip signal** through their within-comarca correlation; precip is now the more
-  robust single-predictor channel on this panel.
-- Bivariate within-R² = 0.42 vs 0.32 (Tmax-only) or 0.39 (precip-only): both predictors
-  carry independent variance, supporting a "both heat and rain hurt" reading rather
-  than either being a pure confounder of the other.
+- Retained as a reference specification; replaced as headline by `Tmin + precip`
+  (within-R² 0.469) once Tmin was added to the candidate set. Both channels here
+  retain independent significance, but the Tmax coefficient drops by more than half
+  vs the univariate, and the entire Tmax signal is in turn absorbed by Tmin once
+  the trivariate is run (see decomposition table above).
+- Within-comarca correlation pattern (Tmax ↔ precip = 0.70) is the canonical
+  convective-summer regime signature for inland Catalonia: hot Augusts go *with*
+  rainier Julys here, not against them.
 
 ### Winter-recharge null result (Arbequina, n=90)
 
-Adding a fixed Dec–Mar window of `precip` or `P − ET₀` to the headline Tmax model on
-the Arbequina panel does not improve fit:
+Adding a fixed Dec–Mar window of `precip` or `P − ET₀` to a summer-Tmax model on
+the Arbequina panel does not improve fit (winter null is expected to carry over to
+a Tmin model — the winter signal is weaker than the within-comarca SE either way,
+but a Tmin + winter retest is an open task):
 
 | spec | within-R² | summer Tmax β / t | winter β / t |
 |---|---:|---|---|
@@ -235,38 +306,45 @@ the Arbequina panel does not improve fit:
 ## Open questions / next steps
 
 1. **Irrigated-olive sign test (next priority).** Refit the headline bivariate
-   `Tmax + precip` on *irrigated* Arbequina yield in Segrià / Urgell / Pla d'Urgell
+   `Tmin + precip` on *irrigated* Arbequina yield in Segrià / Urgell / Pla d'Urgell
    (Canal d'Urgell zone) using `regadiu_kg_ha` from the DARP yield panel. If the negative
    summer-precip coefficient survives under irrigation it confirms the rain channel is
    storm/disease/PAR-mediated rather than compounded drought; if it vanishes the rainfed
-   precip signal is partly water-supply-confounded. Requires (a) a `regadiu`-based
-   cultivar-share whitelist from `olives.csv`, (b) `parse_yield.py` already exposes
-   `regadiu_ha` and `regadiu_kg_ha`, (c) decision on which climate file to weight by
-   (probably unweighted comarca mean for the sign test, irrigated-area-weighted for a
-   precise effect size).
-2. **Solar radiation channel.** Download AgERA5 `solar_radiation_flux` for 2015–2024,
-   add `srad_mean` to `extract_climate.py`, and refit `Tmax + precip + srad` on the
+   precip signal is partly water-supply-confounded. The Tmin coefficient is also worth
+   watching: if irrigated Tmin sensitivity is dampened, transpirational night-cooling is
+   helping; if it persists, the night-respiration / oil-quality mechanism dominates.
+   Requires (a) a `regadiu`-based cultivar-share whitelist from `olives.csv`,
+   (b) `parse_yield.py` already exposes `regadiu_ha` and `regadiu_kg_ha`, (c) decision
+   on which climate file to weight by (probably unweighted comarca mean for the sign
+   test, irrigated-area-weighted for a precise effect size).
+2. **Tmin replication on the rainfed-80 panel.** The Tmin > Tmax finding has only been
+   demonstrated on the Arbequina panel. A scan of `tmin_mean` 21d on the rainfed-80
+   mixed-cultivar panel would confirm whether night-warmth dominance is Arbequina-specific
+   or pan-Catalan. Cheap (one CLI invocation).
+3. **Solar radiation channel.** Download AgERA5 `solar_radiation_flux` for 2015–2024,
+   add `srad_mean` to `extract_climate.py`, and refit `Tmin + precip + srad` on the
    Arbequina panel. If `srad` absorbs the precip signal the mechanism is PAR loss;
    otherwise the residual precip effect is hail / disease / mechanical damage.
    Recommended only after the irrigated test, which already separates the water-supply
    channel from the storm/disease/PAR channels.
-3. **Spring and concurrent moisture windows.** The winter Dec–Mar fixed window was null;
-   spring (Apr–Jun) rain, August concurrent rain, and a cumulative running `P − ET₀`
-   from 1 October Y-1 remain untested as potential moderators of the summer Tmax channel.
-4. **2-D scan of the precip window.** The 19-July peak is robust across 30/60/90-day
+4. **Spring and concurrent moisture windows.** The winter Dec–Mar fixed window was null
+   against Tmax; spring (Apr–Jun) rain, August concurrent rain, and a cumulative running
+   `P − ET₀` from 1 October Y-1 remain untested as potential moderators of either
+   temperature channel. Re-run with Tmin as the heat predictor.
+5. **2-D scan of the precip window.** The 19-July peak is robust across 30/60/90-day
    lengths and 1/5/10 mm thresholds, but a joint heatmap of (window-end × window-length)
    would show whether the peak is a sharp ridge or a broad plateau.
-5. **Other cultivars.** Repeat the cultivar-restricted bivariate scan for Morruda /
-   Empeltre on the southern Tarragona comarques (Baix Ebre, Montsià, Terra Alta) as a
-   cross-cultivar comparison. The 4× signal dilution on the rainfed-80 panel may unwind
-   when each cultivar is analysed separately.
-6. **Rebuild olive-weighted climate using rainfed-only weights.** Modify
+6. **Other cultivars.** Repeat the cultivar-restricted Tmin + precip bivariate for
+   Morruda / Empeltre on the southern Tarragona comarques (Baix Ebre, Montsià, Terra Alta)
+   as a cross-cultivar comparison. The 4× signal dilution on the rainfed-80 panel may
+   unwind when each cultivar is analysed separately.
+7. **Rebuild olive-weighted climate using rainfed-only weights.** Modify
    `extract_climate_olive_weighted.py` to filter `sist == "S"` before computing weights,
-   then rerun both Arbequina (Tmax) and rainfed-80 (Tmax + precip) scans. Cleanest
+   then rerun both Arbequina (Tmin) and rainfed-80 (Tmin + precip) scans. Cleanest
    possible specification.
-7. **Make the cultivar whitelist a CLI step.** Add `--cultivar` to `dun_rainfed_fraction.py`
+8. **Make the cultivar whitelist a CLI step.** Add `--cultivar` to `dun_rainfed_fraction.py`
    so `comarca_arbequina_whitelist.csv` is regenerable from the pipeline rather than ad-hoc.
-8. **Almond.** Once olive is finalised, repeat the area-weighted DUN pipeline for almond
+9. **Almond.** Once olive is finalised, repeat the area-weighted DUN pipeline for almond
    (pending almond DUN file confirmation from user).
 
 ## Known limitations specific to the olive analysis

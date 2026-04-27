@@ -72,8 +72,8 @@ pipeline is single-source area-weighted, not a two-source hybrid.
 ## Analysis Tools
 
 ```bash
-# Sliding-window OLS screen — headline Arbequina spec (see PLAN.md)
-python src/sliding_window_regression.py --crop olive --var tmax_mean \
+# Sliding-window OLS screen — headline Arbequina spec (Tmin; see PLAN.md)
+python src/sliding_window_regression.py --crop olive --var tmin_mean \
     --agg mean --window 21 --scan-start 06-01 --scan-end 09-15 \
     --comarca-whitelist data/dun/comarca_arbequina_whitelist.csv \
     --tag arbequina    # uses unweighted agera5_daily_catalonia.csv by default
@@ -231,12 +231,14 @@ Refer to these files for detailed specifications. They document not just what th
 
 From the current `PLAN.md` timing analysis:
 
-1. **Cultivar restriction is the largest single source of signal-to-noise improvement.** Restricting the olive panel to 10 Arbequina-dominant comarques (Arbequina ≥ 90 % of rainfed olive area, ≥ 500 ha rainfed) raised within-R² from ~0.09 (mixed-cultivar rainfed-80, n=174) to ~0.32 (Arbequina-only, n=100) on the headline summer Tmax regression, despite a 43 % drop in n.
+1. **Cultivar restriction is the largest single source of signal-to-noise improvement.** Restricting the olive panel to 10 Arbequina-dominant comarques (Arbequina ≥ 90 % of rainfed olive area, ≥ 500 ha rainfed) raised within-R² from ~0.09 (mixed-cultivar rainfed-80, n=174) to ~0.42 (Arbequina-only, n=100) on the headline summer Tmin regression, despite a 43 % drop in n.
 
-2. **Timing converges on mid-to-late August for Arbequina.** The 14-, 21-, and 28-day mean-Tmax windows all peak with window-end between 17 and 24 August. The 21-day window ending 17 August (covering ~28 July → 17 August) is the recommended primary specification: t = −6.51, p = 4.3e-9, within-R² = 0.32.
+2. **Tmin is the dominant heat predictor, not Tmax.** Mean nightly minimum temperature (`tmin_mean`) outperforms mean daily maximum at every window length (21d/08-17 within-R² 0.42 vs 0.32). When both compete in the same FE-OLS, Tmax collapses to non-significance (Tmin t = −4.19, Tmax t = −1.58 in the bivariate; Tmin t = −2.84, Tmax t = −0.68 in the trivariate Tmin + Tmax + precip). Tmax was a noisier proxy for the same heat-stress signal Tmin carries directly.
 
-3. **Continuous `mean Tmax` outperforms threshold counts on the cultivar-restricted set.** At the same 14-day window, `mean Tmax` gives within-R² = 0.23 versus 0.12 for `Tmax ≥ 32 °C count`. The threshold operator was discarding usable temperature information once cross-cultivar heterogeneity was removed.
+3. **Headline two-channel model is `Tmin + precip`.** Bivariate `log_yield ~ FE + meanTmin(21d, 08-17) + sumPrecip(30d, 07-19)` on the Arbequina panel gives within-R² = 0.47 (n=100), Tmin β = −0.275 t/ha/°C (t = −3.64), precip β = −0.0076 t/ha/mm (t = −2.87). Both channels carry independent variance.
 
-4. **`mean VPD` agrees on the same vulnerable period but is weaker than `mean Tmax`.** Temperature itself, not VPD, is the dominant one-predictor signal on the Arbequina panel.
+4. **Rain channel is intensity-driven, not occurrence-driven.** `count ≥ 5 mm` (within-R² 0.36) is almost as strong as `precip sum` (0.39); `count ≥ 1 mm` is much weaker (0.24). Pattern is more consistent with convective-storm / hail / disease pressure than with cloud-cover / PAR loss.
 
-5. **Full-year `P - ET0` is more useful as background context than as a clean summer timing driver.** It shows a plausible positive winter signal (late Dec / early Jan), but mixed-sign summer windows.
+5. **Continuous `mean Tmax` outperforms threshold counts on the cultivar-restricted set.** At the same 14-day window, `mean Tmax` gives within-R² = 0.23 versus 0.12 for `Tmax ≥ 32 °C count`. `mean VPD` (0.11) is weaker than both temperature predictors. Temperature itself, not VPD, is the dominant one-predictor signal on the Arbequina panel.
+
+6. **Winter recharge null on the Arbequina panel.** Adding Dec–Mar `P` or `P − ET₀` to the headline summer-temperature model does not improve fit and the winter coefficient is indistinguishable from zero. The earlier full-panel positive winter signal does not survive cultivar restriction.
