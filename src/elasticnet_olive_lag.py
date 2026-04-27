@@ -90,9 +90,10 @@ def load_climate_biweekly() -> pd.DataFrame:
 
 
 def load_olive_yield() -> pd.DataFrame:
-    """Load olive yield data: comarca, year, yield_tha."""
+    """Load rainfed olive yield data: comarca, year, yield_tha."""
     df = pd.read_csv(YIELD_CSV)
     olives = df.loc[df["crop_group"] == "olive", ["comarca", "year", "yield_tha"]].copy()
+    olives = olives.dropna(subset=["yield_tha"])
     olives = olives.rename(columns={"year": "agro_year"})
     return olives
 

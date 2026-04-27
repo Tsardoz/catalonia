@@ -95,6 +95,13 @@ python src/elasticnet_olive_lag.py
 # DUN rainfed-fraction whitelist (used to build comarca_olive_whitelist.csv)
 python src/dun_rainfed_fraction.py
 
+# DUN cultivar-share whitelist for a given crop / regime / cultivar
+# (e.g. rainfed Arbequina headline whitelist, or irrigated Arbequina sign-test whitelist)
+python src/dun_cultivar_fraction.py --crop olive --regime S --cultivar ARBEQUINA \
+    --campaign 2024 --threshold 0.90 --min-cult-ha 500 --input data/dun/olives.csv
+python src/dun_cultivar_fraction.py --crop olive --regime R --cultivar ARBEQUINA \
+    --campaign 2024 --threshold 0.90 --min-cult-ha 200 --input data/dun/olives.csv
+
 # Visual check: olive DUN parcels vs AgERA5 grid cells per comarca
 python src/plot_olive_dun_grid_map.py
 ```
@@ -192,13 +199,17 @@ Olive yield in year Y is driven by climate from Dec 1 (Y-1) through Nov 30 (Y). 
 - olive: oil olive
 - other: pomegranate, persimmon, asian pear
 
-Filter criterion: `seca_ha > 0 AND seca_kg_ha > 0` (rainfed area and yield both positive).
+Filter criterion: row is kept if **either** rainfed (`seca_ha > 0 AND seca_kg_ha > 0`)
+or irrigated (`regadiu_ha > 0 AND regadiu_kg_ha > 0`) is positive. The dropped regime's
+`yield_*_tha` is `NaN`. Output columns: `seca_ha`, `seca_kg_ha`, `yield_tha` (rainfed)
+plus `regadiu_ha`, `regadiu_kg_ha`, `yield_irrig_tha` (irrigated). Existing rainfed
+analyses that filter on `yield_tha > 0` are unaffected.
 
 ## Key Data Files
 
 | File | Size | Status |
 |------|------|--------|
-| catalan_woody_yield_raw.csv | 121KB | Tracked |
+| catalan_woody_yield_raw.csv | 230KB | Tracked (rainfed + irrigated columns; see parse_yield.py) |
 | comarca_centroids.csv | 2KB | Tracked |
 | comarca_polygons.gpkg | 11MB | Tracked |
 | agera5_daily_catalonia.csv | 52MB (~157K rows) | **GITIGNORED** (regenerate with extract_climate.py) |
@@ -210,7 +221,8 @@ Filter criterion: `seca_ha > 0 AND seca_kg_ha > 0` (rainfed area and yield both 
 | olive_groves_catalonia.gpkg | 12MB | Tracked (CORINE 2018 + DEM + corrected temps) |
 | dun/olive_dun_grid_cells_2024.csv | 21KB | Tracked (DUN olive area per AgERA5 cell, used as weights) |
 | dun/comarca_olive_whitelist.csv | <1KB | Tracked (18 comarques where olive is ≥80% rainfed-area) |
-| dun/comarca_arbequina_whitelist.csv | <1KB | Tracked (10 comarques where Arbequina is ≥90% of rainfed olive area AND ≥500 ha; headline cultivar subset) |
+| dun/comarca_arbequina_whitelist.csv | <1KB | Tracked (10 comarques where Arbequina is ≥90% of rainfed olive area AND ≥500 ha; headline rainfed cultivar subset) |
+| dun/comarca_irrigated_arbequina_whitelist.csv | <1KB | Tracked (8 comarques where Arbequina is ≥90% of *irrigated* olive area AND ≥200 ha; irrigated sign-test subset) |
 | dun/comarca_olive_rainfed_fraction.csv | 3KB | Tracked (DUN rainfed-fraction per comarca) |
 
 ## Documentation
@@ -242,3 +254,5 @@ From the current `PLAN.md` timing analysis:
 5. **Continuous `mean Tmax` outperforms threshold counts on the cultivar-restricted set.** At the same 14-day window, `mean Tmax` gives within-R² = 0.23 versus 0.12 for `Tmax ≥ 32 °C count`. `mean VPD` (0.11) is weaker than both temperature predictors. Temperature itself, not VPD, is the dominant one-predictor signal on the Arbequina panel.
 
 6. **Winter recharge null on the Arbequina panel.** Adding Dec–Mar `P` or `P − ET₀` to the headline summer-temperature model does not improve fit and the winter coefficient is indistinguishable from zero. The earlier full-panel positive winter signal does not survive cultivar restriction.
+
+7. **Irrigated-olive sign test passes for both channels.** On the 8-comarca irrigated Arbequina panel (n=80) the univariate Tmin and precip coefficients keep the same negative sign and slightly larger magnitude than on the rainfed control of the same 8 comarques (Tmin β = −0.519 vs −0.366 t/ha/°C; precip β = −0.0183 vs −0.0109 t/ha/mm). Within-R² roughly halves under irrigation (0.40 → 0.19 for the bivariate), consistent with irrigation absorbing the water-supply half of both stresses but leaving the non-water mechanisms (night-respiration / oil-quality for Tmin; storm / disease / PAR for precip) intact. Bivariate split is unstable at this n with r=0.73 collinearity; univariate signs are the cleaner result.

@@ -1,14 +1,18 @@
 """
 temperature_decomp_arbequina.py
-FE-OLS decomposition on the Arbequina-restricted olive panel:
-  yield ~ FE_c + {summer_Tmin, summer_Tmax, summer_precip}
+FE-OLS decomposition on a (cultivar-restricted) olive panel:
+  target ~ FE_c + {summer_Tmin, summer_Tmax, summer_precip}
 
-Tests whether mean Tmin (best univariate predictor on this panel) carries
-information independent of mean Tmax and of summer precipitation, fitting
-all 7 univariate / bivariate / trivariate specifications at the headline
-windows.
+Tests whether mean Tmin (best univariate predictor on the rainfed Arbequina
+panel) carries information independent of mean Tmax and of summer
+precipitation, fitting all 7 univariate / bivariate / trivariate specifications
+at the headline windows.
+
+Defaults to the rainfed Arbequina panel; override --whitelist / --target-col
+to run on the irrigated Arbequina panel (or any other restriction).
 """
 
+import argparse
 from itertools import combinations
 from pathlib import Path
 
@@ -17,9 +21,9 @@ import pandas as pd
 import statsmodels.api as sm
 
 DATA = Path(__file__).parent.parent / "data"
-CLIMATE = DATA / "agera5_daily_catalonia.csv"
+CLIMATE_DEFAULT = DATA / "agera5_daily_catalonia.csv"
 YIELD = DATA / "catalan_woody_yield_raw.csv"
-WHITELIST = DATA / "dun" / "comarca_arbequina_whitelist.csv"
+WHITELIST_DEFAULT = DATA / "dun" / "comarca_arbequina_whitelist.csv"
 
 # Headline windows (all 21d for temperature, 30d for precip; same end as before)
 SPECS = [
@@ -29,13 +33,26 @@ SPECS = [
 ]
 
 
-def load_inputs():
-    wl = pd.read_csv(WHITELIST)["comarca"].str.strip().unique().tolist()
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--whitelist", type=Path, default=WHITELIST_DEFAULT,
+                   help=f"Comarca whitelist CSV (default {WHITELIST_DEFAULT.name})")
+    p.add_argument("--target-col", default="yield_tha",
+                   help="Yield column to model (default yield_tha; use yield_irrig_tha for irrigated)")
+    p.add_argument("--climate-csv", type=Path, default=CLIMATE_DEFAULT,
+                   help=f"Daily climate CSV (default {CLIMATE_DEFAULT.name})")
+    p.add_argument("--tag", default="", help="Optional label printed in the header")
+    return p.parse_args()
+
+
+def load_inputs(whitelist: Path, target_col: str, climate_csv: Path):
+    wl = pd.read_csv(whitelist)["comarca"].str.strip().unique().tolist()
     y = pd.read_csv(YIELD)
     y = y.loc[(y["pheno_key"] == "olive") & y["comarca"].isin(wl),
-              ["year", "comarca", "yield_tha"]].copy()
+              ["year", "comarca", target_col]].copy()
+    y = y.dropna(subset=[target_col])
     cols = ["date", "comarca", "tmin_mean", "tmax_mean", "precip_mean"]
-    c = pd.read_csv(CLIMATE, usecols=cols, parse_dates=["date"])
+    c = pd.read_csv(climate_csv, usecols=cols, parse_dates=["date"])
     c = c.loc[c["comarca"].isin(wl)].copy()
     c["doy"] = c["date"].dt.dayofyear
     c["year"] = c["date"].dt.year
@@ -53,10 +70,10 @@ def window_feature(c, var, end_mmdd, window, agg):
     return out
 
 
-def fit(df, predictors):
-    sub = df.dropna(subset=["yield_tha"] + predictors).copy()
+def fit(df, predictors, target_col):
+    sub = df.dropna(subset=[target_col] + predictors).copy()
     dummies = pd.get_dummies(sub["comarca"], drop_first=True, dtype=float)
-    y = sub["yield_tha"].values
+    y = sub[target_col].values
     X_fe = sm.add_constant(dummies.reset_index(drop=True))
     res_fe = sm.OLS(y, X_fe).fit()
     X = sm.add_constant(pd.concat([sub[predictors].reset_index(drop=True),
@@ -74,7 +91,8 @@ def fit(df, predictors):
 
 
 def main():
-    y, c = load_inputs()
+    args = parse_args()
+    y, c = load_inputs(args.whitelist, args.target_col, args.climate_csv)
     feats = []
     for name, var, end, w, agg in SPECS:
         f = window_feature(c, var, end, w, agg).rename(columns={var: name})
@@ -84,7 +102,9 @@ def main():
         df = df.merge(f, on=["comarca", "year"], how="inner")
 
     pred_names = [s[0] for s in SPECS]
-    print(f"Panel: {len(df)} obs, {df['comarca'].nunique()} comarques, "
+    tag_suffix = f"  [{args.tag}]" if args.tag else ""
+    print(f"Panel{tag_suffix}: target={args.target_col}, whitelist={args.whitelist.name}")
+    print(f"  {len(df)} obs, {df['comarca'].nunique()} comarques, "
           f"years {df['year'].min()}-{df['year'].max()}")
     for name, var, end, w, agg in SPECS:
         print(f"  {name:14s} = {var} {agg} over {w}d ending {end}")
@@ -107,7 +127,7 @@ def main():
 
     print("\n" + "=" * 78)
     for name, preds in specs:
-        r = fit(df, preds)
+        r = fit(df, preds, args.target_col)
         print(f"\n=== {name} ===")
         print(f"n={r['n']}  within_R2={r['within_r2']:.4f}  total_R2={r['r2']:.4f}")
         for p, (coef, se, t, pv) in r["params"].items():

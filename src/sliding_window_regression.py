@@ -1,13 +1,16 @@
 """
 sliding_window_regression.py
-One-predictor sliding-window OLS for rainfed crop yield vs daily climate.
+One-predictor sliding-window OLS for crop yield vs daily climate.
 
 For each weekly anchor date in [--scan-start, --scan-end] a rolling window of
 length --window ends at that date (inclusive). The within-window climate is
 reduced to a single per-(comarca, year) feature using --agg (count of days
 above --threshold, or mean/sum of the variable). One OLS is fitted:
 
-    yield_tha ~ feature + comarca_FE
+    target ~ feature + comarca_FE
+
+where target defaults to yield_tha (rainfed) and can be set with --target-col
+(e.g. yield_irrig_tha for irrigated panels). Rows with a NaN target are dropped.
 
 Outputs the coefficient table as CSV and a coefficient-vs-window-end plot.
 
@@ -52,13 +55,16 @@ def parse_args() -> argparse.Namespace:
                    help="Override daily climate CSV path (default agera5_daily_catalonia.csv)")
     p.add_argument("--elevation-correct", action="store_true",
                    help="Use agera5_daily_catalonia_elevcor.csv (ignored if --climate-csv set)")
+    p.add_argument("--target-col", default="yield_tha",
+                   help="Yield column to model (default yield_tha; use yield_irrig_tha for irrigated)")
     p.add_argument("--tag", default=None, help="Optional suffix for output filenames")
     return p.parse_args()
 
 
-def load_yield(crop: str, whitelist: Path | None) -> pd.DataFrame:
+def load_yield(crop: str, whitelist: Path | None, target_col: str) -> pd.DataFrame:
     y = pd.read_csv(YIELD_CSV)
-    y = y.loc[y["pheno_key"] == crop, ["year", "comarca", "yield_tha"]].copy()
+    y = y.loc[y["pheno_key"] == crop, ["year", "comarca", target_col]].copy()
+    y = y.dropna(subset=[target_col])
     if whitelist is not None:
         wl = pd.read_csv(whitelist)["comarca"].str.strip().unique()
         y = y.loc[y["comarca"].isin(wl)].copy()
@@ -90,13 +96,13 @@ def aggregate_window(c: pd.DataFrame, var: str, agg: str, threshold: float | Non
     return feat
 
 
-def fit_one(yield_df: pd.DataFrame, feat: pd.DataFrame) -> dict:
+def fit_one(yield_df: pd.DataFrame, feat: pd.DataFrame, target_col: str) -> dict:
     df = yield_df.merge(feat, on=["comarca", "year"], how="inner").dropna()
     if df["comarca"].nunique() < 2 or len(df) < 10:
         return {"n": len(df), "coef": np.nan, "stderr": np.nan, "t": np.nan, "p": np.nan,
                 "r2": np.nan, "within_r2": np.nan}
     dummies = pd.get_dummies(df["comarca"], drop_first=True, dtype=float)
-    y = df["yield_tha"].values
+    y = df[target_col].values
     X_fe = sm.add_constant(dummies.reset_index(drop=True))
     res_fe = sm.OLS(y, X_fe).fit()
     X_full = sm.add_constant(pd.concat([df[["feature"]].reset_index(drop=True),
@@ -118,12 +124,13 @@ def fit_one(yield_df: pd.DataFrame, feat: pd.DataFrame) -> dict:
 
 def main() -> None:
     args = parse_args()
-    yield_df = load_yield(args.crop, args.comarca_whitelist)
+    yield_df = load_yield(args.crop, args.comarca_whitelist, args.target_col)
     if yield_df.empty:
-        raise SystemExit(f"No yield rows for crop={args.crop} (whitelist={args.comarca_whitelist})")
+        raise SystemExit(f"No yield rows for crop={args.crop} target={args.target_col} "
+                         f"(whitelist={args.comarca_whitelist})")
     comarcas = sorted(yield_df["comarca"].unique())
-    print(f"Crop {args.crop}: {len(yield_df)} obs, {len(comarcas)} comarques, "
-          f"years {yield_df['year'].min()}-{yield_df['year'].max()}")
+    print(f"Crop {args.crop} target={args.target_col}: {len(yield_df)} obs, "
+          f"{len(comarcas)} comarques, years {yield_df['year'].min()}-{yield_df['year'].max()}")
 
     climate_path = (args.climate_csv if args.climate_csv is not None
                     else (CLIMATE_CSV_ELEVCOR if args.elevation_correct else CLIMATE_CSV))
@@ -138,7 +145,7 @@ def main() -> None:
     rows = []
     for end_doy in end_doys:
         feat = aggregate_window(climate, args.var, args.agg, args.threshold, end_doy, args.window)
-        res = fit_one(yield_df, feat)
+        res = fit_one(yield_df, feat, args.target_col)
         res["window_end_doy"] = end_doy
         res["window_end_date"] = (ref + pd.Timedelta(days=end_doy - 1)).strftime("%m-%d")
         rows.append(res)

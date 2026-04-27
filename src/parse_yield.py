@@ -1,13 +1,19 @@
 """
 parse_yield.py  —  Step 1
-Parse rainfed (secà) woody crop yield data from Produccions_comarcals xlsx files.
+Parse rainfed (secà) and irrigated (regadiu) woody crop yield data from
+Produccions_comarcals xlsx files.
 
 Uses openpyxl directly to handle merged cells correctly. pandas read_excel
 misassigns comarca names on these files due to merged cell handling.
 
+A row is kept if EITHER the rainfed yield OR the irrigated yield is positive.
+For the dropped regime (kg/ha == 0) the corresponding yield_tha column is set
+to NaN, so existing rainfed analyses that filter on yield_tha continue to work.
+
 Output CSV columns:
     year, comarca, crop_catalan, crop_en, crop_group, pheno_key,
-    seca_ha, seca_kg_ha, yield_tha
+    seca_ha, seca_kg_ha, yield_tha,
+    regadiu_ha, regadiu_kg_ha, yield_irrig_tha
 """
 
 import re
@@ -20,11 +26,13 @@ DATA_DIR = Path(__file__).parent.parent / "data"
 SHEET = "LLENYOSOS"
 
 # Columns by position in the raw LLENYOSOS sheet
-COL_COMARCA   = 0
-COL_GRUP      = 1
-COL_CROP      = 2
-COL_SECA_HA   = 3
-COL_SECA_KGHA = 5  # rainfed yield kg/ha (col 4 is irrigated area)
+COL_COMARCA      = 0
+COL_GRUP         = 1
+COL_CROP         = 2
+COL_SECA_HA      = 3
+COL_REGADIU_HA   = 4
+COL_SECA_KGHA    = 5
+COL_REGADIU_KGHA = 6
 
 # target crops: catalan name -> (english name, crop_group)
 # double-space variant of raisin grape is included as a separate key
@@ -98,26 +106,33 @@ def parse_one_year(path: Path) -> pd.DataFrame:
             continue
 
         try:
-            seca_ha   = float(row[COL_SECA_HA])   if row[COL_SECA_HA]   is not None else 0.0
-            seca_kgha = float(row[COL_SECA_KGHA]) if row[COL_SECA_KGHA] is not None else 0.0
+            seca_ha      = float(row[COL_SECA_HA])      if row[COL_SECA_HA]      is not None else 0.0
+            regadiu_ha   = float(row[COL_REGADIU_HA])   if row[COL_REGADIU_HA]   is not None else 0.0
+            seca_kgha    = float(row[COL_SECA_KGHA])    if row[COL_SECA_KGHA]    is not None else 0.0
+            regadiu_kgha = float(row[COL_REGADIU_KGHA]) if row[COL_REGADIU_KGHA] is not None else 0.0
         except (TypeError, ValueError):
             continue
 
-        if seca_ha <= 0 or seca_kgha <= 0:
+        rainfed_ok   = seca_ha > 0 and seca_kgha > 0
+        irrigated_ok = regadiu_ha > 0 and regadiu_kgha > 0
+        if not (rainfed_ok or irrigated_ok):
             continue
 
         crop_en, crop_group = TARGET_CROPS[crop]
 
         records.append({
-            "year":         year,
-            "comarca":      comarca,
-            "crop_catalan": crop,
-            "crop_en":      crop_en,
-            "crop_group":   crop_group,
-            "pheno_key":    _pheno_key(crop, crop_group),
-            "seca_ha":      seca_ha,
-            "seca_kg_ha":   seca_kgha,
-            "yield_tha":    seca_kgha / 1000.0,
+            "year":            year,
+            "comarca":         comarca,
+            "crop_catalan":    crop,
+            "crop_en":         crop_en,
+            "crop_group":      crop_group,
+            "pheno_key":       _pheno_key(crop, crop_group),
+            "seca_ha":         seca_ha,
+            "seca_kg_ha":      seca_kgha,
+            "yield_tha":       seca_kgha / 1000.0 if rainfed_ok else float("nan"),
+            "regadiu_ha":      regadiu_ha,
+            "regadiu_kg_ha":   regadiu_kgha,
+            "yield_irrig_tha": regadiu_kgha / 1000.0 if irrigated_ok else float("nan"),
         })
 
     wb.close()
@@ -139,7 +154,9 @@ if __name__ == "__main__":
     print(f"Saved {len(df):,} records to {out}")
     print(f"Years:     {sorted(df['year'].unique())}")
     print(f"Comarques: {df['comarca'].nunique()}")
-    print(f"\nRecords per crop_group:")
+    print(f"\nRainfed (yield_tha) records per crop_group:")
     print(df.groupby("crop_group")["yield_tha"].count().to_string())
+    print(f"\nIrrigated (yield_irrig_tha) records per crop_group:")
+    print(df.groupby("crop_group")["yield_irrig_tha"].count().to_string())
     print(f"\nSample:")
     print(df.head(10).to_string(index=False))

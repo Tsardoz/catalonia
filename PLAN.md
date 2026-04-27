@@ -48,6 +48,15 @@ hybrid.
   model on this Arbequina panel does not improve fit (within-R² 0.336 → 0.336) and the
   winter coefficient is indistinguishable from zero (t ≈ −0.2 to +0.05). The earlier
   full-panel positive winter signal does not survive cultivar restriction.
+- **Irrigated-olive sign test (passes for both channels).** On an 8-comarca irrigated
+  Arbequina panel (≥ 90 % cultivar share, ≥ 200 ha rainfed; n=80) the univariate
+  Tmin coefficient is **β = −0.519 t/ha/°C (t = −3.58)** and the univariate precip
+  coefficient is **β = −0.0183 t/ha/mm (t = −3.83)** — same sign and *larger* magnitude
+  than the rainfed-control 8-comarca panel (Tmin β = −0.366; precip β = −0.0109).
+  Within-R² roughly halves under irrigation (0.40 → 0.19 for the bivariate), consistent
+  with irrigation absorbing the water-supply half of both stresses but leaving the
+  non-water mechanisms (night-respiration / oil-quality for Tmin; storm / disease /
+  PAR for precip) intact. See *Irrigated-olive sign test* below.
 - These remain **exploratory comarca-year screening results**, not a mechanistic olive
   water-stress model.
 
@@ -70,8 +79,13 @@ using only rainfed parcels is an open task.
 
 ### Yield + supporting tables
 
-- `data/catalan_woody_yield_raw.csv` — DARP/Gencat yield, all woody crops, all years (rainfed only).
-- **`data/dun/comarca_arbequina_whitelist.csv`** — **10 comarques where Arbequina is ≥ 90 % of rainfed olive area AND rainfed Arbequina ≥ 500 ha (DUN 2024, parcels ≥ 0.5 ha). Used for the headline analysis.**
+- `data/catalan_woody_yield_raw.csv` — DARP/Gencat yield, all woody crops, all years.
+  Schema as of Apr 2026: `seca_ha`, `seca_kg_ha`, `yield_tha` (rainfed) plus
+  `regadiu_ha`, `regadiu_kg_ha`, `yield_irrig_tha` (irrigated). A row is kept if
+  *either* regime has positive area and yield; the dropped regime's `yield_*_tha`
+  is `NaN`. Existing rainfed analyses that filter on `yield_tha > 0` are unaffected.
+- **`data/dun/comarca_arbequina_whitelist.csv`** — **10 comarques where Arbequina is ≥ 90 % of rainfed olive area AND rainfed Arbequina ≥ 500 ha (DUN 2024, parcels ≥ 0.5 ha). Used for the headline rainfed analysis.**
+- **`data/dun/comarca_irrigated_arbequina_whitelist.csv`** — **8 comarques where Arbequina is ≥ 90 % of *irrigated* olive area AND irrigated Arbequina ≥ 200 ha (DUN 2024). Used for the irrigated sign test.**
 - `data/dun/comarca_olive_whitelist.csv` — 18 comarques where olive is ≥ 80 % rainfed-area (DUN 2024, parcels ≥ 0.5 ha). Used for the older mixed-cultivar robustness check.
 - `data/dun/olive_dun_grid_cells_2024.csv` — olive area per (comarca, AgERA5 cell), used as area weights for the olive-weighted climate file.
 - `data/comarca_olive_elevation_correction_oliveweighted.csv` — residual `dT_C` after area-weighting.
@@ -229,6 +243,60 @@ rather than synoptic frontal cooling).
   convective-summer regime signature for inland Catalonia: hot Augusts go *with*
   rainier Julys here, not against them.
 
+## Irrigated-olive sign test (Arbequina, headline windows, n=80)
+
+The two-channel `Tmin + precip` headline was refit on an **irrigated** Arbequina
+panel built from `regadiu_kg_ha` in the regenerated yield file. Whitelist criterion:
+Arbequina ≥ 90 % of *irrigated* olive area AND ≥ 200 ha irrigated Arbequina (DUN 2024).
+This produces 8 comarques (Garrigues, Segrià, Baix Camp, Priorat, Urgell, Noguera,
+Tarragonès, Alt Camp) covering the Canal d'Urgell zone plus the Camp de Tarragona /
+Priorat irrigated belts. Same headline windows as the rainfed model (Tmin 21d / 08-17,
+precip 30d / 07-19). The 200 ha threshold (relaxed from the rainfed 500 ha) is needed
+because irrigated Arbequina area is smaller than rainfed in most comarques outside
+Garrigues / Segrià / Baix Camp.
+
+| panel | n | spec | Tmin β / t | precip β / t | within-R² |
+|---|--:|---|---|---|--:|
+| Rainfed Arbequina (10-comarca headline) | 100 | Tmin alone | **−0.433 / −8.02** | — | **0.419** |
+| Rainfed Arbequina (10-comarca headline) | 100 | precip alone | — | **−0.0146 / −7.53** | **0.389** |
+| Rainfed Arbequina (10-comarca headline) | 100 | Tmin + precip | −0.275 / −3.64 | −0.0076 / −2.87 | **0.469** |
+| Rainfed control, *same 8* as irrigated | 80 | Tmin alone | −0.366 / −6.60 | — | 0.381 |
+| Rainfed control, *same 8* as irrigated | 80 | precip alone | — | −0.0109 / −5.51 | 0.299 |
+| Rainfed control, *same 8* as irrigated | 80 | Tmin + precip | −0.277 / −3.43 | −0.0041 / −1.50 (ns) | 0.400 |
+| **Irrigated Arbequina (8-comarca)** | **80** | **Tmin alone** | **−0.519 / −3.58** | — | 0.153 |
+| **Irrigated Arbequina (8-comarca)** | **80** | **precip alone** | — | **−0.0183 / −3.83** | 0.171 |
+| **Irrigated Arbequina (8-comarca)** | **80** | **Tmin + precip** | −0.252 / −1.20 (ns) | −0.0122 / −1.73 (p=.089) | 0.188 |
+
+- **Both univariate channels keep the predicted negative sign under irrigation.** The
+  precip coefficient is *larger* in absolute terms on the irrigated panel than on the
+  rainfed control (β = −0.0183 vs −0.0109); the Tmin coefficient is also larger
+  (β = −0.519 vs −0.366). The sign test passes for both: neither signal collapses to
+  zero or flips sign once water-supply confounding is removed.
+- **Within-R² roughly halves** (0.40 → 0.19 for the bivariate). Approximately half of
+  the rainfed within-comarca variance was indeed water-supply-mediated and is removed
+  by irrigation; the remaining half is the non-water mechanisms.
+- **Bivariate split is unstable at n=80 with high collinearity.** Within-comarca
+  Tmin ↔ precip correlation is r = 0.73 on this panel and only ~19 % of within
+  variance remains to share between the two predictors. Both lose individual
+  significance in the bivariate (Tmin t = −1.20, precip t = −1.73). The univariate
+  sign tests are the cleaner result; the bivariate decomposition should not be
+  over-interpreted at this n.
+- **Tmax stays demoted under irrigation.** Bivariate Tmin + Tmax on the irrigated
+  panel: Tmin t = −2.61, Tmax t = +0.23 (ns). The Tmin > Tmax dominance is preserved
+  across both regimes.
+- **Mechanism implication.** If the rainfed precip signal had been primarily a hidden
+  drought-compounding proxy, irrigation should have eliminated it. It did not. The
+  surviving (and amplified) precip coefficient is consistent with the
+  storm/disease/PAR mechanism class. Symmetrically, if the rainfed Tmin signal had
+  been primarily transpirational night-cooling loss, irrigation should have dampened
+  it. It did not. The surviving Tmin coefficient is consistent with the
+  night-respiration / oil-quality mechanism class.
+- **What this does *not* say.** The panel measures yield, not applied irrigation
+  volume. It does not address whether irrigated comarques could maintain yields
+  with less summer water — only that the *residual* yield variance, conditional on
+  whatever irrigation was actually applied, is dominated by mechanisms irrigation
+  cannot offset.
+
 ### Winter-recharge null result (Arbequina, n=90)
 
 Adding a fixed Dec–Mar window of `precip` or `P − ET₀` to a summer-Tmax model on
@@ -305,47 +373,118 @@ but a Tmin + winter retest is an open task):
 
 ## Open questions / next steps
 
-1. **Irrigated-olive sign test (next priority).** Refit the headline bivariate
-   `Tmin + precip` on *irrigated* Arbequina yield in Segrià / Urgell / Pla d'Urgell
-   (Canal d'Urgell zone) using `regadiu_kg_ha` from the DARP yield panel. If the negative
-   summer-precip coefficient survives under irrigation it confirms the rain channel is
-   storm/disease/PAR-mediated rather than compounded drought; if it vanishes the rainfed
-   precip signal is partly water-supply-confounded. The Tmin coefficient is also worth
-   watching: if irrigated Tmin sensitivity is dampened, transpirational night-cooling is
-   helping; if it persists, the night-respiration / oil-quality mechanism dominates.
-   Requires (a) a `regadiu`-based cultivar-share whitelist from `olives.csv`,
-   (b) `parse_yield.py` already exposes `regadiu_ha` and `regadiu_kg_ha`, (c) decision
-   on which climate file to weight by (probably unweighted comarca mean for the sign
-   test, irrigated-area-weighted for a precise effect size).
-2. **Tmin replication on the rainfed-80 panel.** The Tmin > Tmax finding has only been
+1. ~~**Irrigated-olive sign test.**~~ **Done (Apr 2026).** See *Irrigated-olive sign
+   test* section above. Both univariate channels survive irrigation with the same
+   negative sign and slightly larger magnitude, supporting the non-water mechanism
+   class for both Tmin and precip. Bivariate split unstable at n=80 with r=0.73
+   collinearity.
+2. **Phenological-stage (GDD) alignment of the headline windows (current priority).**
+   Replace the fixed-calendar windows (Tmin 21d ending 08-17, precip 30d ending 07-19)
+   with GDD-anchored windows so each comarca-year is aligned to the same
+   *physiological* stage rather than the same date. See *GDD-sync test plan* below.
+3. **Tmin replication on the rainfed-80 panel.** The Tmin > Tmax finding has only been
    demonstrated on the Arbequina panel. A scan of `tmin_mean` 21d on the rainfed-80
    mixed-cultivar panel would confirm whether night-warmth dominance is Arbequina-specific
    or pan-Catalan. Cheap (one CLI invocation).
-3. **Solar radiation channel.** Download AgERA5 `solar_radiation_flux` for 2015–2024,
+4. **Solar radiation channel.** Download AgERA5 `solar_radiation_flux` for 2015–2024,
    add `srad_mean` to `extract_climate.py`, and refit `Tmin + precip + srad` on the
    Arbequina panel. If `srad` absorbs the precip signal the mechanism is PAR loss;
    otherwise the residual precip effect is hail / disease / mechanical damage.
-   Recommended only after the irrigated test, which already separates the water-supply
-   channel from the storm/disease/PAR channels.
-4. **Spring and concurrent moisture windows.** The winter Dec–Mar fixed window was null
+5. **Spring and concurrent moisture windows.** The winter Dec–Mar fixed window was null
    against Tmax; spring (Apr–Jun) rain, August concurrent rain, and a cumulative running
    `P − ET₀` from 1 October Y-1 remain untested as potential moderators of either
    temperature channel. Re-run with Tmin as the heat predictor.
-5. **2-D scan of the precip window.** The 19-July peak is robust across 30/60/90-day
+6. **2-D scan of the precip window.** The 19-July peak is robust across 30/60/90-day
    lengths and 1/5/10 mm thresholds, but a joint heatmap of (window-end × window-length)
    would show whether the peak is a sharp ridge or a broad plateau.
-6. **Other cultivars.** Repeat the cultivar-restricted Tmin + precip bivariate for
+7. **Other cultivars.** Repeat the cultivar-restricted Tmin + precip bivariate for
    Morruda / Empeltre on the southern Tarragona comarques (Baix Ebre, Montsià, Terra Alta)
    as a cross-cultivar comparison. The 4× signal dilution on the rainfed-80 panel may
    unwind when each cultivar is analysed separately.
-7. **Rebuild olive-weighted climate using rainfed-only weights.** Modify
+8. **Rebuild olive-weighted climate using rainfed-only weights.** Modify
    `extract_climate_olive_weighted.py` to filter `sist == "S"` before computing weights,
    then rerun both Arbequina (Tmin) and rainfed-80 (Tmin + precip) scans. Cleanest
    possible specification.
-8. **Make the cultivar whitelist a CLI step.** Add `--cultivar` to `dun_rainfed_fraction.py`
-   so `comarca_arbequina_whitelist.csv` is regenerable from the pipeline rather than ad-hoc.
-9. **Almond.** Once olive is finalised, repeat the area-weighted DUN pipeline for almond
-   (pending almond DUN file confirmation from user).
+9. ~~**Make the cultivar whitelist a CLI step.**~~ **Done (Apr 2026).** Subsumed by
+   `src/dun_cultivar_fraction.py`, which takes `--crop / --regime / --cultivar /
+   --campaign / --threshold / --min-cult-ha` and writes `comarca_{regime}_{cultivar}_*.csv`
+   pairs. Both `comarca_arbequina_whitelist.csv` (rainfed) and
+   `comarca_irrigated_arbequina_whitelist.csv` are now reproducible from the CLI.
+10. **Almond.** Once olive is finalised, repeat the area-weighted DUN pipeline for
+    almond (pending almond DUN file confirmation from user).
+11. **Comarca-clustered / HC1 standard errors.** Current SEs are OLS, likely
+    under-estimated under spatial autocorrelation. Wrap the FE-OLS in
+    `statsmodels` cluster-robust SEs or a simple block bootstrap on comarca and
+    re-report the headline t-statistics for both rainfed and irrigated panels.
+
+## GDD-sync test plan (next workstream)
+
+**Hypothesis.** The 0.47 within-R² of the rainfed Arbequina headline (and the 0.19
+under irrigation) is partly capped by *phenological misalignment*: the calendar
+window 28 Jul → 17 Aug catches mid-pit-hardening / oil-accumulation in cooler
+upland Priorat or Tarragona interior years and early-fruit-set in warmer
+Lleida-valley years. Aligning each comarca-year to the same accumulated heat
+should reduce within-comarca residual variance and tighten the headline t-stats.
+
+**Approach.** Compute cumulative growing-degree-days (GDD) per comarca-year from
+1 January with base temperature 10 °C (standard for olive; cf. De Melo-Abreu et al.
+2004; Aguilera & Valenzuela 2012):
+
+    GDD(d) = max( 0.5 (Tmax + Tmin) − 10, 0 )
+    cumGDD(d) = Σ GDD(d') for d' = Jan 1 … d
+
+Define phenological anchors as cumGDD thresholds (calibrated from olive-cultivar
+literature for Mediterranean conditions, then sanity-checked against observed
+flowering dates from the IPMA / Gencat phenology network if obtainable):
+
+  - **A1: end of flowering / fruit set onset** ≈ 600–800 GDD₁₀ from Jan 1
+  - **A2: pit hardening onset** ≈ 1400–1700 GDD₁₀
+  - **A3: oil accumulation onset** ≈ 2200–2500 GDD₁₀
+  - **A4: full ripeness / harvest readiness** ≈ 3000–3500 GDD₁₀
+
+For each comarca-year, recompute the headline windows as **GDD-anchored** rather
+than calendar-anchored — e.g. "21-day Tmin window ending at the cumGDD value
+that is the panel-median equivalent of 17 August" (i.e. cumGDD ≈ 1900 GDD₁₀ on
+the panel-mean comarca-year), rather than 17 August on the calendar.
+
+**Expected behaviour by mechanism.**
+
+  - If Tmin damages oil biosynthesis, the GDD-aligned Tmin window should
+    *tighten* the within-R² (because each comarca-year is assayed during the
+    same physiological stage). If calendar alignment is already capturing this
+    well, the improvement will be small.
+  - If the precip damage is storm/disease/PAR-driven (mechanism class supported
+    by the irrigated sign test), it should follow the *calendar* (convective
+    season, hail climatology, fly population dynamics), not the phenology. So
+    GDD alignment should help Tmin but *not* help — and possibly hurt — the
+    precip channel.
+
+**Concrete deliverables.**
+
+  - `src/compute_gdd.py` — per-comarca-year cumulative GDD₁₀ from
+    `agera5_daily_catalonia.csv` (and/or `_oliveweighted` variant); writes
+    `data/agera5_gdd_catalonia.csv` with columns `comarca`, `date`, `gdd_daily`,
+    `cumgdd`. Also flags the date when each cumGDD threshold is crossed
+    per comarca-year.
+  - Extension to `src/sliding_window_regression.py` — accept
+    `--anchor {calendar, gdd}` and, if `gdd`, scan over cumGDD-end values
+    instead of DOY-end values. Keep the existing calendar mode as default.
+  - Side-by-side comparison table: headline rainfed Arbequina (n=100) within-R²
+    for `Tmin 21d` and `precip 30d` under (a) calendar-anchored windows
+    (current 0.42 / 0.39) and (b) GDD-anchored windows. Repeat for the
+    irrigated panel (n=80) where the larger heterogeneity might give GDD
+    alignment more to fix.
+  - Sanity check: after refitting under GDD anchoring, the within-comarca
+    correlation between Tmin and precip predictors should *fall* from 0.73 if
+    the calendar collinearity is partly an alignment artefact, which would also
+    rehabilitate the bivariate Tmin + precip split on the irrigated panel.
+
+**What the test does *not* address.** GDD₁₀ is a model of *vegetative*
+phenology; oil-fill physiology in olive depends on cultivar-specific dormancy
+and chilling-fulfilment thresholds that GDD₁₀ does not capture. A more
+sophisticated alternative — UNIFORC / chill-portions model with a
+chill-then-heat sequence — is left as a follow-up if the simple GDD₁₀ test
+shows promising tightening.
 
 ## Known limitations specific to the olive analysis
 
