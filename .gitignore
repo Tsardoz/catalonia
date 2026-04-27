@@ -8,6 +8,7 @@ data/agera5_daily_catalonia.csv
 data/agera5_daily_catalonia_elevcor.csv
 data/agera5_daily_catalonia_oliveweighted.csv
 data/agera5_daily_catalonia_oliveweighted_elevcor.csv
+data/agera5_daily_catalonia_vpdtmin.csv
 data/agera5_daily_olive_farms.csv
 data/srtm/
 data/dem_catalonia.tif

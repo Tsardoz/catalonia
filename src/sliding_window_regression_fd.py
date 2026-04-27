@@ -1,21 +1,23 @@
 """
-sliding_window_regression.py
-One-predictor sliding-window OLS for rainfed crop yield vs daily climate.
+sliding_window_regression_fd.py
+Within-comarca first-difference sliding-window OLS for crop yield vs daily climate.
 
-For each weekly anchor date in [--scan-start, --scan-end] a rolling window of
-length --window ends at that date (inclusive). The within-window climate is
-reduced to a single per-(comarca, year) feature using --agg (count of days
-above --threshold, or mean/sum of the variable). One OLS is fitted:
+Companion to sliding_window_regression.py. Replaces the comarca fixed-effects
+specification with year-on-year first differences:
 
-    yield_tha ~ feature + comarca_FE
+    d_log_yield[c, t] = log(y[c, t]) - log(y[c, t-1])
+    d_feature[c, t]   = feature[c, t] - feature[c, t-1]
+    d_log_yield ~ d_feature
 
-Outputs the coefficient table as CSV and a coefficient-vs-window-end plot.
+Year-on-year pairs are restricted to consecutive years per comarca; missing
+years are skipped, not jumped. R^2 is honest (no FE share inflating it).
 
 Usage:
-  python src/sliding_window_regression.py --crop olive --var tmax_mean \\
+  python src/sliding_window_regression_fd.py --crop olive --var tmax_mean \\
       --threshold 32 --agg count --window 14 \\
-      --scan-start 06-01 --scan-end 08-31 \\
-      --comarca-whitelist data/dun/comarca_olive_whitelist.csv
+      --scan-start 06-01 --scan-end 09-15 \\
+      --comarca-whitelist data/dun/comarca_olive_whitelist.csv \\
+      --climate-csv data/agera5_daily_catalonia_oliveweighted.csv --tag oliveweighted
 """
 
 import argparse
@@ -52,6 +54,7 @@ def parse_args() -> argparse.Namespace:
                    help="Override daily climate CSV path (default agera5_daily_catalonia.csv)")
     p.add_argument("--elevation-correct", action="store_true",
                    help="Use agera5_daily_catalonia_elevcor.csv (ignored if --climate-csv set)")
+    p.add_argument("--no-log", action="store_true", help="Use Delta yield_tha instead of Delta log(yield_tha)")
     p.add_argument("--tag", default=None, help="Optional suffix for output filenames")
     return p.parse_args()
 
@@ -85,52 +88,52 @@ def aggregate_window(c: pd.DataFrame, var: str, agg: str, threshold: float | Non
         feat = sub.groupby(["comarca", "year"], as_index=False)["_x"].sum().rename(columns={"_x": "feature"})
     elif agg == "mean":
         feat = sub.groupby(["comarca", "year"], as_index=False)[var].mean().rename(columns={var: "feature"})
-    else:  # sum
+    else:
         feat = sub.groupby(["comarca", "year"], as_index=False)[var].sum().rename(columns={var: "feature"})
     return feat
 
 
-def fit_one(yield_df: pd.DataFrame, feat: pd.DataFrame) -> dict:
+def fit_one(yield_df: pd.DataFrame, feat: pd.DataFrame, use_log: bool) -> dict:
     df = yield_df.merge(feat, on=["comarca", "year"], how="inner").dropna()
-    if df["comarca"].nunique() < 2 or len(df) < 10:
-        return {"n": len(df), "coef": np.nan, "stderr": np.nan, "t": np.nan, "p": np.nan,
-                "r2": np.nan, "within_r2": np.nan}
-    dummies = pd.get_dummies(df["comarca"], drop_first=True, dtype=float)
-    y = df["yield_tha"].values
-    X_fe = sm.add_constant(dummies.reset_index(drop=True))
-    res_fe = sm.OLS(y, X_fe).fit()
-    X_full = sm.add_constant(pd.concat([df[["feature"]].reset_index(drop=True),
-                                         dummies.reset_index(drop=True)], axis=1))
-    res = sm.OLS(y, X_full).fit()
-    ssr_fe = float(res_fe.ssr)
-    ssr_full = float(res.ssr)
-    within_r2 = 1.0 - ssr_full / ssr_fe if ssr_fe > 0 else np.nan
+    df = df.sort_values(["comarca", "year"]).reset_index(drop=True)
+    df["y_t"] = np.log(df["yield_tha"]) if use_log else df["yield_tha"]
+    df["year_prev"] = df.groupby("comarca")["year"].shift(1)
+    df["dy"] = df.groupby("comarca")["y_t"].diff()
+    df["dx"] = df.groupby("comarca")["feature"].diff()
+    fd = df.loc[(df["year"] - df["year_prev"] == 1)].dropna(subset=["dy", "dx"])
+    if len(fd) < 10:
+        return {"n": len(fd), "n_comarcas": fd["comarca"].nunique(),
+                "coef": np.nan, "stderr": np.nan, "t": np.nan, "p": np.nan, "r2": np.nan}
+    X = sm.add_constant(fd[["dx"]].values)
+    res = sm.OLS(fd["dy"].values, X).fit()
     return {
-        "n": len(df),
-        "coef": float(res.params["feature"]),
-        "stderr": float(res.bse["feature"]),
-        "t": float(res.tvalues["feature"]),
-        "p": float(res.pvalues["feature"]),
+        "n": len(fd),
+        "n_comarcas": int(fd["comarca"].nunique()),
+        "coef": float(res.params[1]),
+        "stderr": float(res.bse[1]),
+        "t": float(res.tvalues[1]),
+        "p": float(res.pvalues[1]),
         "r2": float(res.rsquared),
-        "within_r2": float(within_r2),
     }
 
 
 def main() -> None:
     args = parse_args()
+    use_log = not args.no_log
     yield_df = load_yield(args.crop, args.comarca_whitelist)
     if yield_df.empty:
         raise SystemExit(f"No yield rows for crop={args.crop} (whitelist={args.comarca_whitelist})")
     comarcas = sorted(yield_df["comarca"].unique())
     print(f"Crop {args.crop}: {len(yield_df)} obs, {len(comarcas)} comarques, "
-          f"years {yield_df['year'].min()}-{yield_df['year'].max()}")
+          f"years {yield_df['year'].min()}-{yield_df['year'].max()}, "
+          f"target = {'Delta log(yield_tha)' if use_log else 'Delta yield_tha'}")
 
     climate_path = (args.climate_csv if args.climate_csv is not None
                     else (CLIMATE_CSV_ELEVCOR if args.elevation_correct else CLIMATE_CSV))
     print(f"Climate file: {climate_path}")
     climate = load_climate(args.var, comarcas, climate_path)
 
-    ref = pd.Timestamp(2021, 1, 1)  # non-leap reference for MM-DD parsing
+    ref = pd.Timestamp(2021, 1, 1)
     end0 = (pd.to_datetime(f"2021-{args.scan_start}") - ref).days + 1
     end1 = (pd.to_datetime(f"2021-{args.scan_end}") - ref).days + 1
     end_doys = list(range(end0, end1 + 1, args.anchor_step))
@@ -138,29 +141,31 @@ def main() -> None:
     rows = []
     for end_doy in end_doys:
         feat = aggregate_window(climate, args.var, args.agg, args.threshold, end_doy, args.window)
-        res = fit_one(yield_df, feat)
+        res = fit_one(yield_df, feat, use_log)
         res["window_end_doy"] = end_doy
         res["window_end_date"] = (ref + pd.Timedelta(days=end_doy - 1)).strftime("%m-%d")
         rows.append(res)
 
-    out = pd.DataFrame(rows)[["window_end_doy", "window_end_date", "n", "coef", "stderr",
-                                "t", "p", "r2", "within_r2"]]
+    out = pd.DataFrame(rows)[["window_end_doy", "window_end_date", "n", "n_comarcas",
+                               "coef", "stderr", "t", "p", "r2"]]
     OUT.mkdir(parents=True, exist_ok=True)
     FIG.mkdir(parents=True, exist_ok=True)
     tag = f"_{args.tag}" if args.tag else ""
     thr = f"_ge{args.threshold:g}" if args.agg == "count" else ""
-    stem = f"{args.crop}_{args.var}_{args.agg}{thr}_w{args.window}{tag}"
+    log_tag = "_logy" if use_log else "_rawy"
+    stem = f"{args.crop}_{args.var}_{args.agg}{thr}_w{args.window}{log_tag}_fd{tag}"
     csv_path = OUT / f"{stem}.csv"
     fig_path = FIG / f"{stem}.png"
     out.to_csv(csv_path, index=False)
 
     fig, ax = plt.subplots(figsize=(10, 4.2))
     ax.errorbar(out["window_end_doy"], out["coef"], yerr=1.96 * out["stderr"],
-                fmt="o-", color="#c0392b", ecolor="#c0392b55", capsize=2)
+                fmt="o-", color="#2c3e50", ecolor="#2c3e5055", capsize=2)
     ax.axhline(0, color="black", linewidth=0.5)
     ax.set_xlabel(f"Window-end day of year ({args.window}-day rolling)")
-    ax.set_ylabel(f"OLS coefficient on {args.agg}({args.var})")
-    ax.set_title(f"{args.crop} — {stem}  (n={int(out['n'].max())}, comarques={len(comarcas)})")
+    ylab_y = "Delta log(yield)" if use_log else "Delta yield_tha"
+    ax.set_ylabel(f"OLS coefficient: {ylab_y} per Delta {args.agg}({args.var})")
+    ax.set_title(f"{args.crop} FD - {stem}  (n={int(out['n'].max())} pairs, comarques={len(comarcas)})")
     fig.tight_layout()
     fig.savefig(fig_path, dpi=160)
     plt.close(fig)

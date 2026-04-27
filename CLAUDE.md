@@ -45,62 +45,64 @@ python src/join_dataset.py
 
 ### Area-Weighted Pipeline (Olive-Specific)
 
-For olive yield analysis using climate weighted by actual farm locations:
+For olive yield analysis, the unweighted comarca mean is replaced by a single-step
+area-weighted aggregator that uses DUN 2024 olive area per AgERA5 cell as weights:
 
 ```bash
-# Run complete pipeline (4 steps, ~3 minutes)
-python src/run_olive_weighted_pipeline.py
+# Olive-area-weighted daily climate (36 olive comarques, 131,508 rows)
+python src/extract_climate_olive_weighted.py
 
-# Or run steps individually:
-python src/extract_climate_olive_farms_daily.py      # Farm-level daily climate
-python src/aggregate_farms_to_comarca.py             # Area-weighted comarca averages
-python src/aggregate_seasonal_olive_weighted.py      # Phenological windows
-python src/join_dataset_olive_weighted.py            # Join with yield
-
-# Compare with centroid approach
-python src/compare_weighted_vs_centroid.py
-
-# Create hybrid dataset (RECOMMENDED for final analysis)
-python src/create_hybrid_olive_dataset.py
+# Optional residual lapse-rate correction on top of the weighted file
+python src/elevation_correction.py --olive-weighted --apply --plot
 ```
 
-**Key differences:**
-- Centroid: 36 comarques, 320 observations, all crops, uniform weighting
-- Area-weighted: 23 comarques, 207 observations, olive only, farm area weighted, elevation-corrected
-- **Hybrid (RECOMMENDED)**: 36 comarques, 320 observations, area-weighted where available + centroid fallback
-- Correlation between methods: r = 0.93 for VPD
+**For mixed-cultivar olive panel analysis (rainfed-80 robustness check):** use
+`data/agera5_daily_catalonia_oliveweighted.csv` with `comarca_olive_whitelist.csv`.
 
-**For olive yield analysis, use:** `data/catalan_olive_yield_climate_hybrid.csv` (320 obs, best of both approaches)
+**For headline cultivar-restricted Arbequina analysis:** use the **unweighted**
+`data/agera5_daily_catalonia.csv` with `data/dun/comarca_arbequina_whitelist.csv`. The
+olive-area-weighted file weights cells by total DUN olive area (rainfed + irrigated), which
+biases the climate signal toward irrigated valley cells in Garrigues and Segrià.
 
-**For olive daily timing analysis, use:** `data/agera5_daily_hybrid_olive.csv` (131,508 rows, 36 olive comarques)
-
-See [HYBRID_DATASET.md](HYBRID_DATASET.md) and [OLIVE_WEIGHTED_PIPELINE.md](OLIVE_WEIGHTED_PIPELINE.md) for details
+The previous hybrid pipeline (`*_hybrid_olive*` files, `extract_climate_olive_farms_daily.py`,
+`run_olive_weighted_pipeline.py`, `create_hybrid_olive_dataset.py`, etc.) has been retired
+and is preserved under `archive/src/hybrid/` and `archive/src/olive_weighted/`. The current
+pipeline is single-source area-weighted, not a two-source hybrid.
 
 ## Analysis Tools
 
 ```bash
-# LPF (low-pass filter) feature extraction with top-5 scatter plots
-python src/lpf_features.py
+# Sliding-window OLS screen — headline Arbequina spec (see PLAN.md)
+python src/sliding_window_regression.py --crop olive --var tmax_mean \
+    --agg mean --window 21 --scan-start 06-01 --scan-end 09-15 \
+    --comarca-whitelist data/dun/comarca_arbequina_whitelist.csv \
+    --tag arbequina    # uses unweighted agera5_daily_catalonia.csv by default
+
+# Mixed-cultivar rainfed-80 robustness check (older canonical spec)
+python src/sliding_window_regression.py --crop olive --var tmax_mean \
+    --threshold 32 --agg count --window 14 --scan-start 06-01 --scan-end 09-15 \
+    --comarca-whitelist data/dun/comarca_olive_whitelist.csv \
+    --climate-csv data/agera5_daily_catalonia_oliveweighted.csv --tag oliveweighted
+
+# First-difference variant (no FE; eliminates biennial bearing and slow drift)
+python src/sliding_window_regression_fd.py --crop olive --var tmax_mean \
+    --agg mean --window 21 --scan-start 06-01 --scan-end 09-15 \
+    --comarca-whitelist data/dun/comarca_arbequina_whitelist.csv --tag arbequina
 
 # Olive distributed-lag impulse response regression
 python src/elasticnet_olive_lag.py
-python src/elasticnet_olive_lag_hybrid.py
 
-# Olive timing / threshold screening on hybrid daily climate
-python src/olive_summer_tmax_threshold_screen.py
-python src/olive_tmax_timing_scan.py
-python src/olive_vpd_timing_scan.py
-python src/olive_cwb_timing_scan.py
-python src/olive_tmax_window_compare.py
+# DUN rainfed-fraction whitelist (used to build comarca_olive_whitelist.csv)
+python src/dun_rainfed_fraction.py
 
-# Publication-quality 4-panel plots (CLI)
-python src/plot_features.py --crop apricot --var vpd_mean --feat lpf_peak --tau 30
-python src/plot_features.py --list-crops
-python src/plot_features.py --list-vars
-
-# Interactive Streamlit dashboard
-streamlit run src/explorer.py
+# Visual check: olive DUN parcels vs AgERA5 grid cells per comarca
+python src/plot_olive_dun_grid_map.py
 ```
+
+Exploratory tooling (LPF features, Streamlit explorer, per-scan screens, hybrid
+regressions, scatter plots) lives under `archive/src/exploratory/`,
+`archive/src/scans_screens/`, and `archive/src/hybrid/` and is no longer part of
+the active pipeline.
 
 ## Architecture
 
@@ -128,13 +130,15 @@ Analysis scripts → figures/*.png
 
 - **Spatial aggregation**: Each comarca gets multiple AgERA5 grid cells (~0.1° resolution) with spatial mean/min/max, not just centroid lookup. 328/704 grid cells assigned to 42 comarques. 3 small comarques (Aran, Barcelonès, Garraf) fall back to nearest cell.
 
-- **Phenological windows**: Defined once in `aggregate_seasonal.py` and imported by all analysis scripts. Crop-specific windows (e.g., olive: flower [May-Jun], fruit_set [Jul-Aug], maturation [Sep-Nov]).
+- **Phenological windows**: Defined once in `aggregate_seasonal.py` (`PHENO_WINDOWS` constant). Crop-specific windows (e.g., olive: flower [May-Jun], fruit_set [Jul-Aug], maturation [Sep-Nov]).
 
-- **Causal filtering**: `lpf_features.py` applies IIR low-pass filters per comarca to capture temporal dynamics (τ = 3, 7, 14, 30 days). Extracts peak value, peak DOY, and peak width.
+- **Olive area weighting**: `extract_climate_olive_weighted.py` aggregates AgERA5 cells per comarca using DUN 2024 olive area per cell as weights (`data/dun/olive_dun_grid_cells_2024.csv`). This replaces the unweighted comarca mean for olive analysis.
+
+- **Sliding-window screening**: `sliding_window_regression.py` is the current primary screening tool. It runs one-predictor OLS with comarca fixed effects across a scan of climate-window endpoints to identify vulnerable timing windows. Reports both total R² and within-R² (the share of variance explained by climate after stripping out comarca FEs). `sliding_window_regression_fd.py` runs the same scan in first differences (Δlog-yield on Δclimate) as a no-FE robustness check.
+
+- **Cultivar restriction**: For the headline Arbequina analysis, the panel is restricted to 10 comarques where Arbequina is ≥ 90 % of rainfed olive area and rainfed Arbequina ≥ 500 ha (DUN 2024 cultivar shares; whitelist at `data/dun/comarca_arbequina_whitelist.csv`). This restriction tripled the within-R² of the canonical Tmax timing regression despite a 43 % drop in n, by removing cross-cultivar heterogeneity.
 
 - **Fixed effects**: Comarca dummy variables absorb baseline yield differences in regression models (yield varies ~5× across comarcas for structural reasons).
-
-- **Shared modules**: `features.py` provides filtering functions imported by `explorer.py` and `plot_features.py`. `aggregate_seasonal.py` exports `PHENO_WINDOWS` constant.
 
 ## Critical Implementation Details
 
@@ -197,16 +201,22 @@ Filter criterion: `seca_ha > 0 AND seca_kg_ha > 0` (rainfed area and yield both 
 | catalan_woody_yield_raw.csv | 121KB | Tracked |
 | comarca_centroids.csv | 2KB | Tracked |
 | comarca_polygons.gpkg | 11MB | Tracked |
-| agera5_daily_catalonia.csv | ~157K rows | **GITIGNORED** (regenerate with extract_climate.py) |
+| agera5_daily_catalonia.csv | 52MB (~157K rows) | **GITIGNORED** (regenerate with extract_climate.py) |
+| agera5_daily_catalonia_elevcor.csv | 73MB | **GITIGNORED** (regenerate with elevation_correction.py) |
+| agera5_daily_catalonia_oliveweighted.csv | 44MB (131,508 rows, 36 olive comarques) | **GITIGNORED** (regenerate with extract_climate_olive_weighted.py) |
+| agera5_daily_catalonia_oliveweighted_elevcor.csv | 64MB | **GITIGNORED** (regenerate with elevation_correction.py --olive-weighted) |
 | agera5_seasonal_catalonia.csv | 1.9MB | Tracked |
 | catalan_woody_yield_climate.csv | 809KB | Tracked (final joined dataset) |
 | olive_groves_catalonia.gpkg | 12MB | Tracked (CORINE 2018 + DEM + corrected temps) |
-| lpf_r2_table.csv | 76KB | Tracked |
+| dun/olive_dun_grid_cells_2024.csv | 21KB | Tracked (DUN olive area per AgERA5 cell, used as weights) |
+| dun/comarca_olive_whitelist.csv | <1KB | Tracked (18 comarques where olive is ≥80% rainfed-area) |
+| dun/comarca_arbequina_whitelist.csv | <1KB | Tracked (10 comarques where Arbequina is ≥90% of rainfed olive area AND ≥500 ha; headline cultivar subset) |
+| dun/comarca_olive_rainfed_fraction.csv | 3KB | Tracked (DUN rainfed-fraction per comarca) |
 
 ## Documentation
 
 - **WARP.md**: Complete pipeline documentation (data sources, variable definitions, spatial methodology, output schemas). **Single source of truth** for pipeline operations.
-- **PLAN.md**: Current olive analysis documentation (hybrid dataset status, exploratory timing scans, current interpretation, next steps). Updated as analysis progresses.
+- **PLAN.md**: Current olive analysis documentation (area-weighted daily climate, sliding-window timing results, current interpretation, next steps). Updated as analysis progresses.
 
 Refer to these files for detailed specifications. They document not just what the code does but **why design decisions were made** (e.g., why 4-week bins, why openpyxl, why comarca fixed effects).
 
@@ -221,10 +231,12 @@ Refer to these files for detailed specifications. They document not just what th
 
 From the current `PLAN.md` timing analysis:
 
-1. **Timing matters more than whole-year bins for olive.** The clearest negative heat/dry-air signal appears in **late July to late August**, not uniformly across the agronomic year.
+1. **Cultivar restriction is the largest single source of signal-to-noise improvement.** Restricting the olive panel to 10 Arbequina-dominant comarques (Arbequina ≥ 90 % of rainfed olive area, ≥ 500 ha rainfed) raised within-R² from ~0.09 (mixed-cultivar rainfed-80, n=174) to ~0.32 (Arbequina-only, n=100) on the headline summer Tmax regression, despite a 43 % drop in n.
 
-2. **`Tmax` hot-day counts are currently the cleanest olive screening variable.** Days with `Tmax >= 32°C` gave the strongest and most interpretable one-predictor timing result on the hybrid daily climate.
+2. **Timing converges on mid-to-late August for Arbequina.** The 14-, 21-, and 28-day mean-Tmax windows all peak with window-end between 17 and 24 August. The 21-day window ending 17 August (covering ~28 July → 17 August) is the recommended primary specification: t = −6.51, p = 4.3e-9, within-R² = 0.32.
 
-3. **`VPD >= 3.0 kPa` tells a similar timing story, but not a cleaner one.** VPD threshold-day scans broadly match the Tmax timing peak, while longest consecutive-run metrics are weaker than total counts.
+3. **Continuous `mean Tmax` outperforms threshold counts on the cultivar-restricted set.** At the same 14-day window, `mean Tmax` gives within-R² = 0.23 versus 0.12 for `Tmax ≥ 32 °C count`. The threshold operator was discarding usable temperature information once cross-cultivar heterogeneity was removed.
 
-4. **Full-year `P - ET0` is more useful as background context than as a clean summer timing driver.** It shows a plausible positive winter signal (late Dec / early Jan), but mixed-sign summer windows.
+4. **`mean VPD` agrees on the same vulnerable period but is weaker than `mean Tmax`.** Temperature itself, not VPD, is the dominant one-predictor signal on the Arbequina panel.
+
+5. **Full-year `P - ET0` is more useful as background context than as a clean summer timing driver.** It shows a plausible positive winter signal (late Dec / early Jan), but mixed-sign summer windows.
