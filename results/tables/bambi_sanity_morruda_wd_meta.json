@@ -1,0 +1,25 @@
+{
+  "formula": "yield_tha ~ wd_flowering_mean + wd_pit_mean + lag_yield + (1|comarca)",
+  "cohort": "morruda",
+  "predictor": "wd",
+  "n_obs": 18,
+  "n_comarcas": 2,
+  "n_years": 9,
+  "draws": 1000,
+  "tune": 1000,
+  "chains": 4,
+  "target_accept": 0.95,
+  "bad_rhat_count_gt_1.01": 0,
+  "low_ess_bulk_count_lt_400": 0,
+  "stage_terms": [
+    "wd_flowering_mean",
+    "wd_pit_mean"
+  ],
+  "contrast": {
+    "delta_name": "wd_pit_mean - wd_flowering_mean",
+    "delta_median": 0.004939501150805735,
+    "delta_q05": -0.3271640091262748,
+    "delta_q95": 0.3441587216244803,
+    "prob_delta_gt_0": 0.5115
+  }
+}

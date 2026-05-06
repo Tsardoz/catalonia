@@ -1,0 +1,19 @@
+year,comarca,seca_ha,yield_tha,lag_yield,cohort
+2016,Baix Ebre,19130.0,1.3,0.886,morruda
+2017,Baix Ebre,19304.0,1.275,1.3,morruda
+2018,Baix Ebre,19442.0,1.069,1.275,morruda
+2019,Baix Ebre,17400.0,1.825,1.069,morruda
+2020,Baix Ebre,17447.0,1.556,1.825,morruda
+2021,Baix Ebre,17266.0,1.714,1.556,morruda
+2022,Baix Ebre,16809.0,0.613,1.714,morruda
+2023,Baix Ebre,11092.0,2.052,0.613,morruda
+2024,Baix Ebre,11390.0,0.528,2.052,morruda
+2016,Montsià,12950.0,1.3,0.886,morruda
+2017,Montsià,13011.0,1.275,1.3,morruda
+2018,Montsià,13096.0,0.761,1.275,morruda
+2019,Montsià,12961.0,1.155,0.761,morruda
+2020,Montsià,13235.0,1.636,1.155,morruda
+2021,Montsià,14006.0,1.539,1.636,morruda
+2022,Montsià,14436.0,0.574,1.539,morruda
+2023,Montsià,11882.0,2.158,0.574,morruda
+2024,Montsià,11982.0,0.24,2.158,morruda

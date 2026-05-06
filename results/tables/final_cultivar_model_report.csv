@@ -1,0 +1,3 @@
+cohort,predictor,n_obs,n_comarcas,n_years,bad_rhat_count_gt_1.01,low_ess_bulk_count_lt_400,delta_median,delta_q05,delta_q95,prob_delta_gt_0
+arbequina,wd,90,10,9,0,0,0.031462627932950585,-0.072267765128896,0.1305005546343314,0.68725
+morruda,wd,18,2,9,0,0,0.004939501150805735,-0.3271640091262748,0.3441587216244803,0.5115

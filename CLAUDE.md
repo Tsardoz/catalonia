@@ -69,47 +69,49 @@ The previous hybrid pipeline (`*_hybrid_olive*` files, `extract_climate_olive_fa
 and is preserved under `archive/src/hybrid/` and `archive/src/olive_weighted/`. The current
 pipeline is single-source area-weighted, not a two-source hybrid.
 
-## Analysis Tools
+## Olive Water Sensitivity Pipeline
+
+The current olive analysis uses a hierarchical Bayesian scalar-on-function regression
+(see `olive_water_sensitivity_plan.md` for the full design). Execute steps sequentially:
 
 ```bash
-# Sliding-window OLS screen — headline Arbequina spec (Tmin; see PLAN.md)
-python src/sliding_window_regression.py --crop olive --var tmin_mean \
-    --agg mean --window 21 --scan-start 06-01 --scan-end 09-15 \
-    --comarca-whitelist data/dun/comarca_arbequina_whitelist.csv \
-    --tag arbequina    # uses unweighted agera5_daily_catalonia.csv by default
+# Step 1: Load cohort-filtered yield + daily climate, compute lag yield
+python src/01_load_data.py --cohort both
 
-# Mixed-cultivar rainfed-80 robustness check (older canonical spec)
-python src/sliding_window_regression.py --crop olive --var tmax_mean \
-    --threshold 32 --agg count --window 14 --scan-start 06-01 --scan-end 09-15 \
-    --comarca-whitelist data/dun/comarca_olive_whitelist.csv \
-    --climate-csv data/agera5_daily_catalonia_oliveweighted.csv --tag oliveweighted
+# Step 2: Re-express daily climate on a common GDD axis (T_b=10°C)
+python src/02_compute_gdd.py            # --base 7/8.5/12.5 for sensitivity
 
-# First-difference variant (no FE; eliminates biennial bearing and slow drift)
-python src/sliding_window_regression_fd.py --crop olive --var tmax_mean \
-    --agg mean --window 21 --scan-start 06-01 --scan-end 09-15 \
-    --comarca-whitelist data/dun/comarca_arbequina_whitelist.csv --tag arbequina
+# Step 3: Build WD (P − ET0) and VPD predictor matrices on GDD axis
+python src/03_compute_water_deficit.py
 
-# Olive distributed-lag impulse response regression
-python src/elasticnet_olive_lag.py
+# Step 4: Write literature-based phenological anchor windows
+python src/04_align_phenology.py
 
+# Step 5: Construct B-spline basis and pre-compute reduced functional predictors
+python src/05_build_basis.py             # --n-basis 4/5/6/8 for sensitivity
+
+# Step 6: Bambi hierarchical sanity check (stage-mean aggregated predictors)
+python src/06_fit_bambi_sanity.py --cohort both --predictor wd
+```
+
+Steps 7–10 (NumPyro production model, posterior contrast, LOYO stability,
+sensitivity analyses) are specified in `olive_water_sensitivity_plan.md` but not
+yet implemented.
+
+### Supporting tools
+
+```bash
 # DUN rainfed-fraction whitelist (used to build comarca_olive_whitelist.csv)
 python src/dun_rainfed_fraction.py
 
 # DUN cultivar-share whitelist for a given crop / regime / cultivar
-# (e.g. rainfed Arbequina headline whitelist, or irrigated Arbequina sign-test whitelist)
 python src/dun_cultivar_fraction.py --crop olive --regime S --cultivar ARBEQUINA \
     --campaign 2024 --threshold 0.90 --min-cult-ha 500 --input data/dun/olives.csv
-python src/dun_cultivar_fraction.py --crop olive --regime R --cultivar ARBEQUINA \
-    --campaign 2024 --threshold 0.90 --min-cult-ha 200 --input data/dun/olives.csv
-
-# Visual check: olive DUN parcels vs AgERA5 grid cells per comarca
-python src/plot_olive_dun_grid_map.py
 ```
 
-Exploratory tooling (LPF features, Streamlit explorer, per-scan screens, hybrid
-regressions, scatter plots) lives under `archive/src/exploratory/`,
-`archive/src/scans_screens/`, and `archive/src/hybrid/` and is no longer part of
-the active pipeline.
+Prior sliding-window OLS and elastic-net analyses have been retired to
+`archive/rolling_window/` and `archive/src/`. They suffered from window-overlap
+artifacts and are superseded by the Bayesian scalar-on-function approach.
 
 ## Architecture
 
@@ -141,7 +143,7 @@ Analysis scripts → figures/*.png
 
 - **Olive area weighting**: `extract_climate_olive_weighted.py` aggregates AgERA5 cells per comarca using DUN 2024 olive area per cell as weights (`data/dun/olive_dun_grid_cells_2024.csv`). This replaces the unweighted comarca mean for olive analysis.
 
-- **Sliding-window screening**: `sliding_window_regression.py` is the current primary screening tool. It runs one-predictor OLS with comarca fixed effects across a scan of climate-window endpoints to identify vulnerable timing windows. Reports both total R² and within-R² (the share of variance explained by climate after stripping out comarca FEs). `sliding_window_regression_fd.py` runs the same scan in first differences (Δlog-yield on Δclimate) as a no-FE robustness check.
+- **Scalar-on-function regression**: The current olive analysis (`src/01_load_data.py` through `src/06_fit_bambi_sanity.py`, with NumPyro production model planned) estimates phenological-stage-specific water sensitivity via a hierarchical Bayesian model with B-spline basis on a common GDD axis. See `olive_water_sensitivity_plan.md` for the full design.
 
 - **Cultivar restriction**: For the headline Arbequina analysis, the panel is restricted to 10 comarques where Arbequina is ≥ 90 % of rainfed olive area and rainfed Arbequina ≥ 500 ha (DUN 2024 cultivar shares; whitelist at `data/dun/comarca_arbequina_whitelist.csv`). This restriction tripled the within-R² of the canonical Tmax timing regression despite a 43 % drop in n, by removing cross-cultivar heterogeneity.
 
@@ -187,7 +189,12 @@ Download these 5 variables for 2015-2024 (50 files total):
 
 ### Agronomic Year
 
-Olive yield in year Y is driven by climate from Dec 1 (Y-1) through Nov 30 (Y). This is the standard agronomic calendar for Mediterranean perennials (flowering May-Jun, harvest Oct-Nov).
+Olive yield in year Y is driven by climate accumulated during the calendar year Y.
+GDD accumulation (T_b=10°C) starts from January 1; December contributes ~0 GDD in
+Catalonia, so the Jan 1 reset is standard practice and matches the cited phenology
+literature. The calendar-based seasonal pipeline (aggregate_seasonal.py) may reference
+a Dec–Nov agronomic window for precipitation, but the GDD-based functional pipeline
+(Steps 1–6) uses the calendar year.
 
 ### Target Crops
 
@@ -228,31 +235,29 @@ analyses that filter on `yield_tha > 0` are unaffected.
 ## Documentation
 
 - **WARP.md**: Complete pipeline documentation (data sources, variable definitions, spatial methodology, output schemas). **Single source of truth** for pipeline operations.
-- **PLAN.md**: Current olive analysis documentation (area-weighted daily climate, sliding-window timing results, current interpretation, next steps). Updated as analysis progresses.
+- **olive_water_sensitivity_plan.md**: Current olive analysis design (hierarchical Bayesian scalar-on-function regression, cultivar cohorts, GDD phenological anchors, stability checks). **Primary source** for analysis methodology.
 
-Refer to these files for detailed specifications. They document not just what the code does but **why design decisions were made** (e.g., why 4-week bins, why openpyxl, why comarca fixed effects).
+Refer to these files for detailed specifications. They document not just what the code does but **why design decisions were made** (e.g., why openpyxl, why T_b=10°C, why not rolling-window OLS).
 
 ## Known Limitations
 
 - **Centroid approximation**: Rainfed crops cluster on south-facing slopes, not valley floors where centroids often fall. Spatial aggregation (mean across multiple grid cells per comarca) partially mitigates this.
 - **Fixed lapse rate**: Olive farm temperature correction uses constant -5.5°C/km; real lapse rates vary seasonally.
-- **No true forecast validation**: ElasticNet 5-fold CV is used only as a rough comparative guide. OLS R² is in-sample and should not be interpreted as out-of-sample predictive skill.
-- **Sample size**: 320 olive rows (36 comarques × 9 years) limits interaction detection. VPD × rainfall interactions likely require soil moisture modeling or larger datasets.
+- **Sample size**: Arbequina panel is ~90 comarca-years (10 comarques × 9 effective years after lag). With n ≈ 9 independent years, the analysis is exploratory / hypothesis-generating; no inferential framework can make it confirmatory.
+- **Do not report Bayesian R² as a headline metric** — use posterior predictive checks and LOYO stability instead.
 
-## Key Findings
+## Current Analysis Status
 
-From the current `PLAN.md` timing analysis:
+The olive analysis has transitioned from sliding-window OLS (archived) to a hierarchical
+Bayesian scalar-on-function regression. The prior sliding-window approach suffered from
+window-overlap artifacts and physiologically implausible sign-stable negative precipitation
+coefficients. See `olive_water_sensitivity_plan.md` for the full rationale.
 
-1. **Cultivar restriction is the largest single source of signal-to-noise improvement.** Restricting the olive panel to 10 Arbequina-dominant comarques (Arbequina ≥ 90 % of rainfed olive area, ≥ 500 ha rainfed) raised within-R² from ~0.09 (mixed-cultivar rainfed-80, n=174) to ~0.42 (Arbequina-only, n=100) on the headline summer Tmin regression, despite a 43 % drop in n.
+The current pipeline (Steps 1–6) is implemented. Steps 7–10 (NumPyro production model,
+posterior contrast, LOYO stability, sensitivity analyses) are designed but not yet coded.
 
-2. **Tmin is the dominant heat predictor, not Tmax.** Mean nightly minimum temperature (`tmin_mean`) outperforms mean daily maximum at every window length (21d/08-17 within-R² 0.42 vs 0.32). When both compete in the same FE-OLS, Tmax collapses to non-significance (Tmin t = −4.19, Tmax t = −1.58 in the bivariate; Tmin t = −2.84, Tmax t = −0.68 in the trivariate Tmin + Tmax + precip). Tmax was a noisier proxy for the same heat-stress signal Tmin carries directly.
-
-3. **Headline two-channel model is `Tmin + precip`.** Bivariate `log_yield ~ FE + meanTmin(21d, 08-17) + sumPrecip(30d, 07-19)` on the Arbequina panel gives within-R² = 0.47 (n=100), Tmin β = −0.275 t/ha/°C (t = −3.64), precip β = −0.0076 t/ha/mm (t = −2.87). Both channels carry independent variance.
-
-4. **Rain channel is intensity-driven, not occurrence-driven.** `count ≥ 5 mm` (within-R² 0.36) is almost as strong as `precip sum` (0.39); `count ≥ 1 mm` is much weaker (0.24). Pattern is more consistent with convective-storm / hail / disease pressure than with cloud-cover / PAR loss.
-
-5. **Continuous `mean Tmax` outperforms threshold counts on the cultivar-restricted set.** At the same 14-day window, `mean Tmax` gives within-R² = 0.23 versus 0.12 for `Tmax ≥ 32 °C count`. `mean VPD` (0.11) is weaker than both temperature predictors. Temperature itself, not VPD, is the dominant one-predictor signal on the Arbequina panel.
-
-6. **Winter recharge null on the Arbequina panel.** Adding Dec–Mar `P` or `P − ET₀` to the headline summer-temperature model does not improve fit and the winter coefficient is indistinguishable from zero. The earlier full-panel positive winter signal does not survive cultivar restriction.
-
-7. **Irrigated-olive sign test passes for both channels.** On the 8-comarca irrigated Arbequina panel (n=80) the univariate Tmin and precip coefficients keep the same negative sign and slightly larger magnitude than on the rainfed control of the same 8 comarques (Tmin β = −0.519 vs −0.366 t/ha/°C; precip β = −0.0183 vs −0.0109 t/ha/mm). Within-R² roughly halves under irrigation (0.40 → 0.19 for the bivariate), consistent with irrigation absorbing the water-supply half of both stresses but leaving the non-water mechanisms (night-respiration / oil-quality for Tmin; storm / disease / PAR for precip) intact. Bivariate split is unstable at this n with r=0.73 collinearity; univariate signs are the cleaner result.
+**Design decisions carried forward from prior work:**
+- Cultivar restriction to Arbequina-dominant comarques (10 comarques, ≥90% rainfed Arbequina, ≥500 ha)
+- Two-cultivar comparison: Arbequina (headline) + Morruda (corroboration)
+- Lag yield as a covariate (alternate bearing)
+- Irrigated panel as a negative control

@@ -6,7 +6,8 @@ Assemble a comarca-level rainfed woody crop yield + climate dataset for Cataloni
 This is an intermediate fine-tune dataset between CropClimateX (US annual crops) and Tatura
 (Australian perennial orchards) in the Tatura Transfer Strategy.
 
-`PLAN.md` is the current working analysis document for the olive distributed-lag regression.
+`olive_water_sensitivity_plan.md` is the current olive analysis design document
+(hierarchical Bayesian scalar-on-function regression).
 This file (`WARP.md`) documents the broader data pipeline and repository structure.
 
 ---
@@ -41,11 +42,17 @@ catalonia/
     extract_climate.py                # Step 3b — spatial aggregation from .nc per comarca polygon
     aggregate_seasonal.py             # Step 4 — seasonal weather aggregation
     join_dataset.py                   # Step 5 — join yield + climate
-    plot_scatter.py                   # Step 6 — scatter plots
-    elasticnet_olive_lag.py           # downstream olive distributed-lag analysis
+    01_load_data.py                   # Olive pipeline — cohort-filtered yield + climate
+    02_compute_gdd.py                 # Olive pipeline — GDD axis interpolation
+    03_compute_water_deficit.py       # Olive pipeline — WD/VPD predictor matrices
+    04_align_phenology.py             # Olive pipeline — phenological anchors
+    05_build_basis.py                 # Olive pipeline — B-spline basis + reduced predictors
+    06_fit_bambi_sanity.py            # Olive pipeline — Bambi hierarchical sanity check
+    utils/config.py                   # Shared config for olive pipeline
+    utils/splines.py                  # B-spline basis construction
   figures/
     olive_agera5_matching_topo.png    # map: olive farms → AgERA5 grid cells with topography
-  PLAN.md
+  olive_water_sensitivity_plan.md
   WARP.md
 ```
 
@@ -378,8 +385,9 @@ rainfed olive area AND rainfed Arbequina ≥ 500 ha). The weighted file biases t
 signal toward irrigated valley cells in Garrigues and Segrià, which is undesirable for a
 rainfed-Arbequina yield analysis.
 
-See `PLAN.md` for the analytical impact (sliding-window OLS comparison, residual `dT_C`
-table, peak-window timing) and the current recommended workflows for olive analysis.
+See `olive_water_sensitivity_plan.md` for the current olive analysis methodology
+(hierarchical Bayesian scalar-on-function regression). Prior sliding-window OLS analyses
+are archived under `archive/rolling_window/`.
 
 ---
 
