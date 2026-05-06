@@ -286,6 +286,39 @@ Anything where the sign of Δ flips or the posterior probability drops below 0.7
 3. ~~Harvest truncation~~ → Fixed 1700 GDD upper bound.
 4. ~~Lag yield~~ → Confirmed: 2015–2024 yield data, n = 9 effective years after lag.
 
+## Pipeline status and results summary
+
+### Implemented (Steps 1–6)
+
+**Data panel:** 90 Arbequina comarca-years (10 comarques × 9 years, 2016–2024 after lag). Mean rainfed yield 1.08 t/ha (sd 0.53), median 0.91. 18 Morruda comarca-years (2 comarques) included for completeness.
+
+**GDD–phenology validation:** GDD thresholds at T_b=10°C map to physiologically correct calendar dates in Catalonia: flowering onset (350 GDD) → mean May 24 (range May 2–Jun 18), pit hardening start (900 GDD) → Jul 9 (Jun 22–Aug 2), harvest truncation (1700 GDD) → Sep 4 (Aug 8–Nov 1). Water deficit deepens from flowering (WD = −3.6 mm/day) to pit hardening (−5.1); VPD rises from 1.78 to 2.51 kPa. Both gradients match expected Mediterranean summer drought intensification.
+
+**B-spline basis:** 5 cubic basis functions on 69 grid points (0–1700 GDD, step 25). Partition of unity confirmed (row sums = 1.0 exactly). One interior knot at GDD 850.
+
+**Bambi sanity check (Arbequina, lag_yield only, no year RE):**
+- Convergence: all r̂ = 1.0, all ESS > 400, 0 divergences.
+- wd_flowering: β = −0.014 (90% HDI [−0.060, 0.030])
+- wd_pit: β = +0.016 (90% HDI [−0.081, 0.106])
+- lag_yield: β = +0.034 (90% HDI [−0.163, 0.232]) — inert
+- comarca_sigma = 0.30, residual sigma = 0.48
+- Δ(pit − flower) = +0.031, P(Δ>0) = 0.69
+
+**Sensitivity comparison (Arbequina, lag_yield + year RE):**
+- year_sigma = 0.43, residual sigma = 0.31 (35% tighter)
+- lag_yield collapses to β = −0.071 (HDI spans zero)
+- Δ(pit − flower) = +0.071, P(Δ>0) = 0.94 (contrast sharpens)
+- Collision confirmed: year RE and lag_yield compete for the same variance
+
+**Interpretation:** Coefficient signs are directionally correct — pit hardening shows a more positive WD coefficient than flowering, consistent with mesocarp development being the more water-sensitive stage. However, both coefficients span zero at this aggregation level. The stage-mean predictors compress the functional shape into two scalars; the full B-spline model (Step 7) should resolve finer structure. Alternate bearing is undetectable at comarca-level aggregation regardless of specification.
+
+### Not yet implemented (Steps 7–10)
+
+- **Step 7:** NumPyro production model with P-spline smoothness penalty and full functional predictor (not stage means). Both lag-yield and year-RE specs to be run.
+- **Step 8:** Window-integrated β(t) posterior contrast over flowering vs pit hardening GDD ranges.
+- **Step 9:** Leave-one-year-out stability (9 refits) to check if any single year drives the result.
+- **Step 10:** Sensitivity sweeps (T_b, window width, k, predictor choice, irrigated negative control).
+
 ## Minimum viable deliverable
 
-If steps 7, 8, and 9 run end-to-end on real data with sensible posteriors and a plotted Δ contrast, that's a defensible exploratory paper. Steps 6 and 10 strengthen it. Steps 1–5 are infrastructure that has to work but isn't the science.
+If steps 7, 8, and 9 run end-to-end on real data with sensible posteriors and a plotted Δ contrast, that’s a defensible exploratory paper. Steps 6 and 10 strengthen it. Steps 1–5 are infrastructure that has to work but isn’t the science.
