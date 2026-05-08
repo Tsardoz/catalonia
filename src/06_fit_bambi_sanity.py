@@ -22,7 +22,7 @@ import pandas as pd
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent))
 from utils.config import (
     PROCESSED, POSTERIORS, TABLES, DEFAULT_COHORT,
-    FLOWERING_GDD, PIT_HARDENING_GDD, OIL_ACCUMULATION_GDD,
+    PRE_FLOWERING_GDD, FLOWERING_GDD, PIT_HARDENING_GDD, OIL_ACCUMULATION_GDD,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -32,9 +32,12 @@ PREDICTOR_FILES = {
     "wd": "WD_matrix.npy",
     "wd30": "WD30_matrix.npy",
     "vpd": "VPD_matrix.npy",
+    "tmin": "TMIN_matrix.npy",
+    "tmax": "TMAX_matrix.npy",
 }
 
 STAGE_ALIASES = {
+    "pre_flowering": "preflower",
     "flowering": "flowering",
     "pit_hardening": "pit",
     "oil_accumulation": "oil",
@@ -47,13 +50,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--cohort",
-        choices=["arbequina", "morruda", "both", "all"],
+        choices=["arbequina", "morruda", "all_olive", "both", "all"],
         default="both",
         help="Cultivar cohort(s) to fit (default: both).",
     )
     parser.add_argument(
         "--predictor",
-        choices=["wd", "wd30", "vpd"],
+        choices=["wd", "wd30", "vpd", "tmin", "tmax"],
         default="wd",
         help="Primary predictor curve to aggregate (default: wd).",
     )
@@ -82,7 +85,7 @@ def resolve_fit_cohorts(requested: str, obs_df: pd.DataFrame) -> list[str]:
     """Resolve which cohort fits to run based on CLI selection."""
     available = set(obs_df["cohort"].astype(str).unique())
     if requested == "both":
-        target = ["arbequina", "morruda"]
+        target = ["arbequina", "morruda", "all_olive"]
     elif requested == "all":
         target = ["all"]
     else:
@@ -121,6 +124,7 @@ def load_dependencies():
 def load_stage_anchors() -> dict[str, tuple[float, float]]:
     """Load stage anchor windows; fallback to config defaults if needed."""
     defaults = {
+        "pre_flowering": PRE_FLOWERING_GDD,
         "flowering": FLOWERING_GDD,
         "pit_hardening": PIT_HARDENING_GDD,
         "oil_accumulation": OIL_ACCUMULATION_GDD,
@@ -193,7 +197,7 @@ def add_stage_means(
     include_oil: bool,
 ) -> tuple[pd.DataFrame, list[str]]:
     """Compute stage-window means for selected predictor and append to DataFrame."""
-    stages = ["flowering", "pit_hardening"]
+    stages = ["pre_flowering", "flowering", "pit_hardening"]
     if include_oil:
         stages.append("oil_accumulation")
 
@@ -305,16 +309,34 @@ def main():
         model_df.to_csv(data_path, index=False)
 
         contrast_payload = {}
+        preflower_term = f"{args.predictor}_preflower_mean"
         flower_term = f"{args.predictor}_flowering_mean"
         pit_term = f"{args.predictor}_pit_mean"
+        contrasts = []
+        # pit − flower (original headline contrast)
         if flower_term in idata.posterior and pit_term in idata.posterior:
             delta = (idata.posterior[pit_term] - idata.posterior[flower_term]).values.reshape(-1)
-            contrast_payload = {
+            contrasts.append({
                 "delta_name": f"{pit_term} - {flower_term}",
                 "delta_median": float(np.median(delta)),
                 "delta_q05": float(np.quantile(delta, 0.05)),
                 "delta_q95": float(np.quantile(delta, 0.95)),
                 "prob_delta_gt_0": float((delta > 0).mean()),
+            })
+        # flower − preflower (new: does sensitivity differ before vs during flowering?)
+        if preflower_term in idata.posterior and flower_term in idata.posterior:
+            delta_pf = (idata.posterior[flower_term] - idata.posterior[preflower_term]).values.reshape(-1)
+            contrasts.append({
+                "delta_name": f"{flower_term} - {preflower_term}",
+                "delta_median": float(np.median(delta_pf)),
+                "delta_q05": float(np.quantile(delta_pf, 0.05)),
+                "delta_q95": float(np.quantile(delta_pf, 0.95)),
+                "prob_delta_gt_0": float((delta_pf > 0).mean()),
+            })
+        if contrasts:
+            contrast_payload = {
+                **contrasts[0],             # headline: pit − flower
+                "all_contrasts": contrasts,  # full list for JSON output
             }
 
         meta = {

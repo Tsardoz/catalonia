@@ -32,9 +32,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--cohort",
-        choices=["arbequina", "morruda", "both"],
+        choices=["arbequina", "morruda", "all_olive", "both"],
         default="both",
-        help="Cultivar cohort(s) to include (default: both).",
+        help="Cultivar cohort(s) to include (default: both = all registered).",
     )
     parser.add_argument(
         "--strict-cohorts",
@@ -46,7 +46,7 @@ def parse_args() -> argparse.Namespace:
 
 def resolve_cohort_comarques(cohort_mode: str, strict: bool) -> dict[str, set[str]]:
     """Load cohort whitelist comarques."""
-    requested = ["arbequina", "morruda"] if cohort_mode == "both" else [cohort_mode]
+    requested = list(COHORT_WHITELISTS.keys()) if cohort_mode == "both" else [cohort_mode]
     cohort_sets: dict[str, set[str]] = {}
 
     for cohort in requested:
