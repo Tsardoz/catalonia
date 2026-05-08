@@ -1,0 +1,42 @@
+{
+  "formula": "yield_tha ~ wd_preflower_mean + wd_flowering_mean + wd_pit_mean + lag_yield",
+  "cohort": "morruda",
+  "predictor": "wd",
+  "n_obs": 18,
+  "n_comarcas": 2,
+  "n_years": 9,
+  "draws": 1000,
+  "tune": 1000,
+  "chains": 4,
+  "target_accept": 0.9,
+  "bad_rhat_count_gt_1.01": 0,
+  "low_ess_bulk_count_lt_400": 0,
+  "stage_terms": [
+    "wd_preflower_mean",
+    "wd_flowering_mean",
+    "wd_pit_mean"
+  ],
+  "contrast": {
+    "delta_name": "wd_pit_mean - wd_flowering_mean",
+    "delta_median": 0.1407189167755235,
+    "delta_q05": -0.21914285499581643,
+    "delta_q95": 0.49705635192480185,
+    "prob_delta_gt_0": 0.75025,
+    "all_contrasts": [
+      {
+        "delta_name": "wd_pit_mean - wd_flowering_mean",
+        "delta_median": 0.1407189167755235,
+        "delta_q05": -0.21914285499581643,
+        "delta_q95": 0.49705635192480185,
+        "prob_delta_gt_0": 0.75025
+      },
+      {
+        "delta_name": "wd_flowering_mean - wd_preflower_mean",
+        "delta_median": -0.22137469205504418,
+        "delta_q05": -0.5915036071114288,
+        "delta_q95": 0.13886139156652336,
+        "prob_delta_gt_0": 0.15275
+      }
+    ]
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "formula": "yield_tha ~ vpd_preflower_mean + vpd_flowering_mean + vpd_pit_mean + lag_yield + (1|comarca)",
+  "cohort": "arbequina",
+  "predictor": "vpd",
+  "n_obs": 90,
+  "n_comarcas": 10,
+  "n_years": 9,
+  "draws": 1000,
+  "tune": 1000,
+  "chains": 4,
+  "target_accept": 0.9,
+  "bad_rhat_count_gt_1.01": 0,
+  "low_ess_bulk_count_lt_400": 0,
+  "stage_terms": [
+    "vpd_preflower_mean",
+    "vpd_flowering_mean",
+    "vpd_pit_mean"
+  ],
+  "contrast": {
+    "delta_name": "vpd_pit_mean - vpd_flowering_mean",
+    "delta_median": -0.7509509602610782,
+    "delta_q05": -1.0907890970544112,
+    "delta_q95": -0.4296082345403005,
+    "prob_delta_gt_0": 0.00025,
+    "all_contrasts": [
+      {
+        "delta_name": "vpd_pit_mean - vpd_flowering_mean",
+        "delta_median": -0.7509509602610782,
+        "delta_q05": -1.0907890970544112,
+        "delta_q95": -0.4296082345403005,
+        "prob_delta_gt_0": 0.00025
+      },
+      {
+        "delta_name": "vpd_flowering_mean - vpd_preflower_mean",
+        "delta_median": 0.9422760831335587,
+        "delta_q05": 0.28366585682060796,
+        "delta_q95": 1.582731108339559,
+        "prob_delta_gt_0": 0.9915
+      }
+    ]
+  }
+}
