@@ -1,0 +1,29 @@
+{
+  "cohort": "all_olive",
+  "predictor": "wd_state",
+  "include_year_re": true,
+  "formula": "yield_tha_centered ~ f(wd_state_reduced_standardized) + lag_yield_centered [+ (1|year)]",
+  "n_obs": 152,
+  "n_comarcas": 19,
+  "n_years": 8,
+  "n_basis": 5,
+  "draws": 2000,
+  "tune": 2000,
+  "chains": 4,
+  "chain_method": "sequential",
+  "target_accept": 0.95,
+  "sd_eps": 1e-06,
+  "exclude_year": 2016,
+  "stem_suffix": "",
+  "bad_rhat_count_gt_1.01": 0,
+  "low_ess_bulk_count_lt_400": 0,
+  "files": {
+    "posterior_netcdf": "/home/tsardoz/phd/catalonia/results/posteriors/numpyro_main_all_olive_wd_state_excl2016.nc",
+    "summary_csv": "/home/tsardoz/phd/catalonia/results/tables/numpyro_main_all_olive_wd_state_excl2016_summary.csv",
+    "design_csv": "/home/tsardoz/phd/catalonia/results/tables/numpyro_main_all_olive_wd_state_excl2016_design.csv",
+    "x_mean_npy": "/home/tsardoz/phd/catalonia/results/posteriors/numpyro_main_all_olive_wd_state_excl2016_x_mean.npy",
+    "x_sd_npy": "/home/tsardoz/phd/catalonia/results/posteriors/numpyro_main_all_olive_wd_state_excl2016_x_sd.npy",
+    "beta_coefs_phys_npy": "/home/tsardoz/phd/catalonia/results/posteriors/numpyro_main_all_olive_wd_state_excl2016_beta_coefs_phys.npy",
+    "beta_t_draws_npy": "/home/tsardoz/phd/catalonia/results/posteriors/numpyro_main_all_olive_wd_state_excl2016_beta_t_draws.npy"
+  }
+}

@@ -2,7 +2,7 @@
   "cohort": "arbequina",
   "predictor": "wd_state",
   "include_year_re": true,
-  "formula": "yield_tha ~ f(wd_state_reduced_standardized) + lag_yield + (1|comarca) [+ (1|year)]",
+  "formula": "yield_tha_centered ~ f(wd_state_reduced_standardized) + lag_yield_centered [+ (1|year)]",
   "n_obs": 90,
   "n_comarcas": 10,
   "n_years": 9,

@@ -29,8 +29,11 @@ def main():
 
     gdd_grid = np.load(PROCESSED / "gdd_grid.npy")
     WD = np.load(PROCESSED / "WD_matrix.npy")
+    WD_STATE = np.load(PROCESSED / "WD_state_matrix.npy")
     WD30 = np.load(PROCESSED / "WD30_matrix.npy")
     VPD = np.load(PROCESSED / "VPD_matrix.npy")
+    TMIN = np.load(PROCESSED / "TMIN_matrix.npy")
+    TMAX = np.load(PROCESSED / "TMAX_matrix.npy")
 
     n_grid = len(gdd_grid)
     dt = float(GDD_STEP)  # GDD step size — essential for prior interpretability
@@ -42,21 +45,36 @@ def main():
 
     # Pre-compute integrated functional predictors
     WD_reduced = WD @ B * dt
+    WD_state_reduced = WD_STATE @ B * dt
     WD30_reduced = WD30 @ B * dt
     VPD_reduced = VPD @ B * dt
+    TMIN_reduced = TMIN @ B * dt
+    TMAX_reduced = TMAX @ B * dt
     log.info(f"WD_reduced: {WD_reduced.shape}, "
              f"mean={WD_reduced.mean():.4f}")
+    log.info(f"WD_state_reduced: {WD_state_reduced.shape}, "
+             f"mean={WD_state_reduced.mean():.4f}")
     log.info(f"WD30_reduced: {WD30_reduced.shape}, "
              f"mean={WD30_reduced.mean():.4f}")
     log.info(f"VPD_reduced: {VPD_reduced.shape}, "
              f"mean={VPD_reduced.mean():.4f}")
+    log.info(f"TMIN_reduced: {TMIN_reduced.shape}, "
+             f"mean={TMIN_reduced.mean():.4f}")
+    log.info(f"TMAX_reduced: {TMAX_reduced.shape}, "
+             f"mean={TMAX_reduced.mean():.4f}")
 
     # Save
     np.save(PROCESSED / "B_basis.npy", B)
     np.save(PROCESSED / "WD_reduced.npy", WD_reduced)
+    np.save(PROCESSED / "WD_state_reduced.npy", WD_state_reduced)
     np.save(PROCESSED / "WD30_reduced.npy", WD30_reduced)
     np.save(PROCESSED / "VPD_reduced.npy", VPD_reduced)
-    log.info("Saved B_basis.npy, WD_reduced.npy, WD30_reduced.npy, VPD_reduced.npy")
+    np.save(PROCESSED / "TMIN_reduced.npy", TMIN_reduced)
+    np.save(PROCESSED / "TMAX_reduced.npy", TMAX_reduced)
+    log.info(
+        "Saved B_basis.npy, WD_reduced.npy, WD_state_reduced.npy, WD30_reduced.npy, "
+        "VPD_reduced.npy, TMIN_reduced.npy, TMAX_reduced.npy"
+    )
 
 
 if __name__ == "__main__":

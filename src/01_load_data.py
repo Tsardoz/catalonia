@@ -179,8 +179,42 @@ def load_water_balance(comarcas: set[str]) -> pd.DataFrame:
     log.info(f"Water balance data: {len(wb)} rows")
     return wb
 
+
+def center_yield_by_comarca(
+    yield_df: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Subtract per-(cohort, comarca) mean from yield_tha and lag_yield.
+
+    This within-estimator removes structural between-comarca baseline differences
+    at the data level, making a comarca random effect in the model redundant.
+    Comarca means are saved separately for back-transformation if needed.
+
+    Note: means are computed on the fitted panel (all available years after lag
+    drop). In LOYO refits the held-out year remains in the mean, introducing a
+    minor ~1/9-year leakage; this is documented as a known limitation.
+    """
+    means = (
+        yield_df.groupby(["cohort", "comarca"])[["yield_tha", "lag_yield"]]
+        .mean()
+        .rename(columns={"yield_tha": "yield_tha_mean", "lag_yield": "lag_yield_mean"})
+        .reset_index()
+    )
+    out = yield_df.merge(means, on=["cohort", "comarca"], how="left")
+    out["yield_tha"] = out["yield_tha"] - out["yield_tha_mean"]
+    out["lag_yield"] = out["lag_yield"] - out["lag_yield_mean"]
+    out = out.drop(columns=["yield_tha_mean", "lag_yield_mean"])
+    log.info(
+        f"Comarca-mean centered yield: grand mean={out['yield_tha'].mean():.4f} "
+        f"(should be ~0), within-comarca std={out['yield_tha'].std():.4f}"
+    )
+    return out, means
+
+
 def write_cultivar_yield_reports(yield_df: pd.DataFrame) -> None:
-    """Write final cultivar yield summary reports for downstream review."""
+    """Write final cultivar yield summary reports for downstream review.
+    Note: yield_tha and lag_yield are comarca-mean centered at this point.
+    """
     TABLES.mkdir(parents=True, exist_ok=True)
     report = (
         yield_df
@@ -245,12 +279,16 @@ def main():
     yield_df = validate_coverage(yield_df, climate_df)
     comarcas = set(yield_df["comarca"])  # update after any drops
 
-    # 4. GDD + water balance
+    # 4. Center yield by comarca mean (within-estimator; comarca RE not needed in model)
+    yield_df, comarca_means = center_yield_by_comarca(yield_df)
+
+    # 5. GDD + water balance
     gdd_df = load_gdd(comarcas)
     wb_df = load_water_balance(comarcas)
 
-    # 5. Save processed datasets
+    # 6. Save processed datasets
     yield_df.to_csv(PROCESSED / "olive_yield.csv", index=False)
+    comarca_means.to_csv(PROCESSED / "comarca_yield_means.csv", index=False)
     climate_df[climate_df["comarca"].isin(comarcas)].to_csv(
         PROCESSED / "daily_climate.csv", index=False
     )
@@ -261,6 +299,7 @@ def main():
         PROCESSED / "water_balance.csv", index=False
     )
     write_cultivar_yield_reports(yield_df)
+    log.info(f"  comarca_yield_means.csv: {len(comarca_means)} rows")
 
     cohort_counts = yield_df.groupby("cohort").size().to_dict()
     log.info(f"Saved to {PROCESSED}/")

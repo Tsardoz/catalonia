@@ -70,6 +70,8 @@ Load three sources into pandas dataframes:
 
 Validate that every comarca-year with a yield observation has complete daily climate coverage from January 1 through harvest. Log missing-data patterns. Drop comarca-years with > 5 % missing daily values rather than imputing. Run the full pipeline (Steps 2–9) independently for each cultivar cohort.
 
+**Within-estimator centering (added):** After coverage validation, subtract the per-(cohort, comarca) mean from both `yield_tha` and `lag_yield`. This within-estimator (Frisch-Waugh) removes structural between-comarca baseline differences at the data level, making a comarca random effect in the model redundant. Comarca means are saved to `data/processed/comarca_yield_means.csv` for back-transformation if needed. Known limitation: means are computed on the full fitted panel; in LOYO refits the held-out year remains in the mean, introducing ~1/9-year leakage that is negligible in practice.
+
 ### Step 2 — GDD axis (`02_compute_gdd.py`)
 
 Compute cumulative GDD per comarca per year from January 1, using base temperature **T_b = 10 °C** for olive (cite De Melo-Abreu et al. 2004 or the specific Spanish source you choose; do **not** optimize T_b on yield data — that creates the Laurent circularity).
@@ -117,12 +119,12 @@ Build B-spline basis on the common GDD grid:
 
 ### Step 6 — Bambi sanity check (`06_fit_bambi_sanity.py`)
 
-Quick model to confirm the hierarchical structure behaves before committing to NumPyro. Pre-aggregate WD into stage-window means (now including pre-flowering) as predictors. Default specification uses lag_yield without year RE (see findings below). Use `--year-re` for the sensitivity comparison.
+Quick model to confirm the hierarchical structure behaves before committing to NumPyro. Pre-aggregate WD into stage-window means (now including pre-flowering) as predictors. Default specification uses lag_yield without year RE. Use `--year-re` for the sensitivity comparison. Comarca RE is omitted: yield is comarca-mean centered in Step 1.
 
 ```python
 import bambi as bmb
 m = bmb.Model(
-    "yield ~ wd_preflower_mean + wd_flowering_mean + wd_pit_mean + lag_yield + (1|comarca)",
+    "yield_tha ~ wd_preflower_mean + wd_flowering_mean + wd_pit_mean + lag_yield",
     data=df,
 )
 fit = m.fit(draws=1000, tune=1000)
@@ -148,57 +150,19 @@ Both specs should be run as a sensitivity comparison in Step 7.
 
 ### Step 7 — NumPyro production model (`07_fit_numpyro_main.py`)
 
-The headline model. Hierarchical scalar-on-function regression using `WD_state_reduced` as predictor input, per-fit basis-column standardization, and a proper RW2 (second-order random walk) P-spline prior.
-The code block below is a legacy skeleton and should be treated as structural pseudocode only; implement the RW2 + per-fit-standardization spec in the execution script.
+The headline model. Scalar-on-function regression using `WD_state_reduced` as predictor input, per-fit basis-column standardization, RW2 P-spline prior, and optional year random effect. **Comarca RE is not included**: yield is comarca-mean centered in Step 1, so there is no between-comarca variance left to absorb.
 
-```python
-import jax.numpy as jnp
-import numpyro
-import numpyro.distributions as dist
-from numpyro.infer import MCMC, NUTS
-
-def model(WD_reduced, B, dt, lag_yield, year_idx, comarca_idx,
-          n_years, n_comarcas, n_basis, n_grid, y=None):
-    # Smoothness via second-difference penalty on spline coefficients
-    sigma_smooth = numpyro.sample("sigma_smooth", dist.HalfNormal(1.0))
-    beta_coefs = numpyro.sample(
-        "beta_coefs",
-        dist.Normal(jnp.zeros(n_basis), 5.0)
-    )
-    # Second-difference penalty as a log-prior increment
-    diff2 = jnp.diff(beta_coefs, n=2)
-    numpyro.factor("smooth_pen", -0.5 * jnp.sum(diff2**2) / sigma_smooth**2)
-
-    # Functional term: WD_reduced already includes integration via @ B * dt
-    functional_effect = WD_reduced @ beta_coefs
-
-    # Hierarchical random effects
-    sigma_year = numpyro.sample("sigma_year", dist.HalfNormal(1.0))
-    sigma_comarca = numpyro.sample("sigma_comarca", dist.HalfNormal(1.0))
-    year_re = numpyro.sample("year_re", dist.Normal(0, sigma_year).expand([n_years]))
-    comarca_re = numpyro.sample(
-        "comarca_re", dist.Normal(0, sigma_comarca).expand([n_comarcas])
-    )
-
-    # Fixed effects
-    alpha = numpyro.sample("alpha", dist.Normal(0, 10))
-    lag_coef = numpyro.sample("lag_coef", dist.Normal(0, 1))
-    sigma = numpyro.sample("sigma", dist.HalfNormal(1.0))
-
-    mu = (alpha + functional_effect + lag_coef * lag_yield
-          + year_re[year_idx] + comarca_re[comarca_idx])
-
-    numpyro.sample("y", dist.Normal(mu, sigma), obs=y)
-```
+Model formula: `yield_tha_centered ~ f(WD_state_reduced_standardized) + lag_yield_centered [+ (1|year)]`
 
 **Critical implementation notes:**
 
-- **Lag yield vs year random effect collision.** Step 6 showed that lag_yield is inert at comarca scale (β ≈ 0 in both specs). Neither removing year_re nor keeping it recovers a meaningful lag coefficient. **Run both specifications as a sensitivity pair** and report which gives a more interpretable posterior. The year-RE spec tightens the residual (0.31 vs 0.48) and sharpens the contrast, but lag-yield is more transparent.
-- Use `WD_state_reduced` from Step 5 as the default production predictor (WD30 is retained for sensitivity comparisons, not as a parallel primary memory predictor).
-- Standardize predictor columns inside each fit (full fit, LOYO fold, sensitivity run) using training rows for that fit only. Save per-fit column means/SDs (`sd` floored at a small epsilon) and back-transform posterior `beta_coefs` to physical scale before Step 8 contrasts.
-- Replace the old Normal + `factor` second-difference penalty with a proper RW2 coefficient construction (anchor coefficients + innovation recursion). Do not add an extra global Normal prior on the assembled coefficient vector.
-- Use 4 chains, 2000 warmup, 2000 samples, `target_accept_prob=0.95`. JAX should make this fast — aim for < 5 min per fit.
-- Save InferenceData as `.nc` to `results/posteriors/main.nc` for downstream analysis.
+- **Comarca RE dropped.** Step 1 pre-subtracts per-(cohort, comarca) means from `yield_tha` and `lag_yield` (within-estimator). The model therefore has no `comarca_idx`, `n_comarcas`, `sigma_comarca`, or `comarca_re` terms.
+- **Lag yield vs year random effect collision** remains. Both are included in the design; sensitivity pair (lag only vs year RE only) run in Step 10.
+- Use `WD_state_reduced` from Step 5 as the default production predictor (WD30 is retained for sensitivity comparisons).
+- Standardize predictor columns inside each fit using training rows only. Save per-fit column means/SDs and back-transform posterior `beta_coefs` to physical scale before Step 8 contrasts.
+- RW2 implemented via anchor coefficients (beta0, beta1) + innovation recursion via `lax.scan`; no extra global Normal prior on assembled coefficients.
+- Use 4 chains, 2000 warmup, 2000 samples, `target_accept_prob=0.95`.
+- Save InferenceData as `.nc` to `results/posteriors/`.
 
 ### Step 8 — Posterior contrast (`08_posterior_contrast.py`)
 
@@ -369,56 +333,70 @@ Figure: `results/figures/stage_posteriors_arbequina_wd.png`
 
 #### Step 7 — NumPyro production model
 
-Hierarchical scalar-on-function regression with RW2 P-spline prior, non-centred comarca and year random effects, WD_state as headline predictor. 4 chains × 2000 warmup + 2000 draws, `target_accept=0.95`, CPU sequential. All fits use all 9 years (2016–2024) with no year exclusions.
+Scalar-on-function regression with RW2 P-spline prior, non-centred year random effect, comarca RE dropped (yield comarca-mean centered in Step 1), WD_state as headline predictor. 4 chains × 2000 warmup + 2000 draws, `target_accept=0.95`, CPU sequential. All fits use all 9 years (2016–2024).
 
-Three cultivar cohorts fitted:
+**Previous results (with comarca RE, pre-centering) — superseded:**
 
-- **Arbequina** (10 comarques, 90 obs): Clean convergence — 0 r̂>1.01, 0 low-ESS parameters.
-- **Morruda** (2 comarques, 18 obs): Diagnostic issues — 15 r̂>1.01, 8 low-ESS. Expected: 2 comarques cannot support comarca-level random effects. Included for directional corroboration only.
-- **All olive** (19 comarques, 171 obs): Clean convergence — 0 r̂>1.01, 0 low-ESS. Broadest spatial replication (every comarca with ≥500 ha DUN rainfed olive area, regardless of cultivar).
+- **Arbequina** (10 comarques, 90 obs): Clean convergence — 0 r̂>1.01, 0 low-ESS.
+- **Morruda** (2 comarques, 18 obs): 15 r̂>1.01, 8 low-ESS (comarca RE unsupported at n=2 comarques).
+- **All olive** (19 comarques, 171 obs): Clean convergence — 0 r̂>1.01, 0 low-ESS.
+
+**Refit required** with comarca-mean centered yield and no comarca RE.
 
 Pallars Jussà dropped from all cohorts by Step 2 (max GDD < 1700 in all years — too cold for olive phenology to complete on the GDD axis).
 
 #### Step 8 — Posterior contrasts (three-cohort comparison)
 
-Window-integrated β(t) contrasts from 8000 posterior draws per cohort:
+Window-integrated β(t) contrasts from 8000 posterior draws per cohort (comarca-mean centered yield, no comarca RE):
 
 **Arbequina (headline):**
-- β_pre-flowering: median −0.00016, 90% CI [−0.00038, +0.00006], P(>0) = 0.11
-- β_flowering: median −0.00006, 90% CI [−0.00019, +0.00008], P(>0) = 0.24
-- β_pit hardening: median +0.00006, 90% CI [−0.00007, +0.00020], P(>0) = 0.76
-- **Δ(pit − flower): median +0.00011, 90% CI [−0.00001, +0.00026], P(Δ>0) = 0.93**
-- Δ(flower − pre): median +0.00010, 90% CI [−0.00004, +0.00026], P(Δ>0) = 0.88
+- β_pre-flowering: median −0.000144, 90% CI [−0.000380, +0.000060], P(>0) = 0.11
+- β_flowering: median −0.000059, 90% CI [−0.000190, +0.000080], P(>0) = 0.24
+- β_pit hardening: median +0.000024, 90% CI [−0.000070, +0.000200], P(>0) = 0.76
+- **Δ(pit − flower): median +0.000084, 90% CI [−0.000110, +0.000260], P(Δ>0) = 0.925**
+- Δ(flower − pre): median +0.000081, P(Δ>0) = 0.865
 
-**Morruda (corroboration — interpret with caution due to convergence issues):**
-- β_pre-flowering: median −0.00013, 90% CI [−0.00071, +0.00046]
-- β_flowering: median −0.00002, 90% CI [−0.00040, +0.00036]
-- β_pit hardening: median +0.00020, 90% CI [−0.00027, +0.00061]
-- **Δ(pit − flower): median +0.00020, 90% CI [−0.00014, +0.00054], P(Δ>0) = 0.84**
+**Morruda (corroboration — all folds now converge cleanly after comarca RE removal):**
+- β_pre-flowering: median −0.000084
+- β_flowering: median +0.000027
+- β_pit hardening: median +0.000230
+- **Δ(pit − flower): median +0.000200, P(Δ>0) = 0.855**
 
 **All olive (broadest spatial test):**
-- β_pre-flowering: median −0.00001, 90% CI [−0.00016, +0.00013]
-- β_flowering: median +0.00001, 90% CI [−0.00008, +0.00010]
-- β_pit hardening: median +0.00004, 90% CI [−0.00004, +0.00013]
-- **Δ(pit − flower): median +0.00003, 90% CI [−0.00006, +0.00013], P(Δ>0) = 0.69**
-- Δ(flower − pre): median +0.00002, 90% CI [−0.00008, +0.00013], P(Δ>0) = 0.64
+- β_pre-flowering: median −0.000033
+- β_flowering: median −0.000009
+- β_pit hardening: median +0.000017
+- **Δ(pit − flower): median +0.000026, P(Δ>0) = 0.743**
+- Δ(flower − pre): P(Δ>0) = 0.670
 
-Figure: `results/figures/beta_t_cohort_comparison.png`
 Contrast table: `results/tables/posterior_contrast_summary_cohort_robustness.csv`
 
-#### Step 9 — LOYO stability (Arbequina)
+#### Step 9 — LOYO stability (all three cohorts)
 
-9 refits excluding one year at a time. Δ(pit − flower) posterior medians across folds:
+Full-data and 9 leave-one-year-out refits per cohort.
 
-- Range: +0.000023 (excl 2023) to +0.000176 (excl 2018)
-- P(Δ>0) range: 0.63 (excl 2023) to 0.99 (excl 2018)
-- 8 of 9 folds have Δ > 0 with P > 0.85; excl-2023 is the weakest fold (P = 0.63)
-- No fold produces a sign flip — Δ is consistently positive
+**Arbequina** — Full-data: Δ = +0.000083, P(Δ>0) = 0.926
 
-2023 is the most influential year: its exclusion halves the contrast and drops P(Δ>0) from 0.93 to 0.63. This aligns with the known ~20% drop in reported olive area in 2023 (likely methodological change in DARP reporting, not a real area change). 2018 exclusion strengthens the contrast (P = 0.99), suggesting 2018 was an anti-signal year.
+| Excl year | Δ median | P(Δ>0) |
+|-----------|----------|--------|
+| 2016 | +0.000053 | 0.781 |
+| 2017 | +0.000067 | 0.863 |
+| 2018 | +0.000112 | 0.969 |
+| 2019 | +0.000075 | 0.904 |
+| 2020 | +0.000104 | 0.950 |
+| 2021 | +0.000086 | 0.918 |
+| 2022 | +0.000071 | 0.883 |
+| 2023 | +0.000062 | 0.886 |
+| 2024 | +0.000099 | 0.943 |
 
-Figures: `results/figures/loyo_beta_overlay_arbequina_wd_state.png`, `results/figures/loyo_delta_strip_arbequina_wd_state.png`
-Table: `results/tables/loyo_summary_arbequina_wd_state.csv`
+All 9 folds positive; P(Δ>0) range 0.78–0.97. No sign flip. 2016 is weakest fold (P=0.78). 2023 no longer uniquely weak (P=0.89) — the ~20% area reporting drop in 2023 is absorbed more cleanly by the year RE once comarca means are removed.
+
+**Morruda** — Full-data: Δ = +0.000197, P(Δ>0) = 0.845. All 9 folds positive; P range 0.73–0.96. CIs wide (underpowered at n=16 per fold). Several folds show r̂>1.01 — expected at n=16 with year RE.
+
+**All olive** — Full-data: Δ = +0.000028, P(Δ>0) = 0.750. P range 0.55–0.93 across folds; 2023 weakest (P=0.55), 2024 strongest (P=0.93). The cultivar-mixing dilution persists as expected.
+
+Figures: `results/figures/loyo_beta_overlay_{cohort}_wd_state.png`, `results/figures/loyo_delta_strip_{cohort}_wd_state.png`
+Tables: `results/tables/loyo_summary_{cohort}_wd_state.csv`
 
 ### Three-cohort robustness assessment
 

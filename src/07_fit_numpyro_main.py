@@ -6,7 +6,8 @@ Implements Step 7 with:
   - default predictor: WD_state_reduced
   - per-fit predictor standardization (column-wise on fit rows)
   - RW2 (second-order random walk) prior on spline coefficients
-  - non-centred comarca/year random effects
+  - non-centred year random effect only (comarca RE dropped: yield is
+    comarca-mean centered in Step 1, making the comarca RE redundant)
 
 Outputs:
   - InferenceData netcdf
@@ -199,9 +200,8 @@ def build_design_arrays(
 
     fit_df["year_str"] = fit_df["year"].astype(str)
     fit_df["year_code"] = fit_df["year_str"].astype("category").cat.codes.astype(int)
-    fit_df["comarca_code"] = fit_df["comarca"].astype("category").cat.codes.astype(int)
     year_levels = list(fit_df["year_str"].astype("category").cat.categories)
-    comarca_levels = list(fit_df["comarca"].astype("category").cat.categories)
+    comarca_levels = list(fit_df["comarca"].astype("category").cat.categories)  # metadata only
 
     arrays = {
         "Xz": Xz,
@@ -210,19 +210,17 @@ def build_design_arrays(
         "y": fit_df["yield_tha"].to_numpy(dtype=float),
         "lag_yield": fit_df["lag_yield"].to_numpy(dtype=float),
         "year_idx": fit_df["year_code"].to_numpy(dtype=int),
-        "comarca_idx": fit_df["comarca_code"].to_numpy(dtype=int),
         "n_years": len(year_levels),
-        "n_comarcas": len(comarca_levels),
         "year_levels": year_levels,
-        "comarca_levels": comarca_levels,
+        "comarca_levels": comarca_levels,  # kept for metadata/logging, not passed to model
     }
     return fit_df, arrays
 
 
 def make_model(numpyro, jnp, lax, dist, include_year_re: bool):
     def model(
-        Xz, lag_yield, year_idx, comarca_idx,
-        n_years, n_comarcas, y=None,
+        Xz, lag_yield, year_idx,
+        n_years, y=None,
     ):
         n_basis = Xz.shape[1]
         if n_basis < 3:
@@ -247,13 +245,6 @@ def make_model(numpyro, jnp, lax, dist, include_year_re: bool):
 
         functional_effect = jnp.dot(Xz, beta_coefs)
 
-        sigma_comarca = numpyro.sample("sigma_comarca", dist.HalfNormal(0.5))
-        comarca_raw = numpyro.sample(
-            "comarca_raw", dist.Normal(0.0, 1.0).expand([n_comarcas])
-        )
-        comarca_re = sigma_comarca * comarca_raw
-        numpyro.deterministic("comarca_re", comarca_re)
-
         year_re = 0.0
         if include_year_re:
             sigma_year = numpyro.sample("sigma_year", dist.HalfNormal(0.5))
@@ -263,11 +254,11 @@ def make_model(numpyro, jnp, lax, dist, include_year_re: bool):
             year_re = sigma_year * year_raw
             numpyro.deterministic("year_re", year_re)
 
-        alpha = numpyro.sample("alpha", dist.Normal(0.0, 1.0))
+        alpha = numpyro.sample("alpha", dist.Normal(0.0, 0.5))
         lag_coef = numpyro.sample("lag_coef", dist.Normal(0.0, 0.5))
         sigma = numpyro.sample("sigma", dist.HalfNormal(1.0))
 
-        mu = alpha + functional_effect + lag_coef * lag_yield + comarca_re[comarca_idx]
+        mu = alpha + functional_effect + lag_coef * lag_yield
         if include_year_re:
             mu = mu + year_re[year_idx]
 
@@ -311,23 +302,19 @@ def fit_one(
         Xz=jnp.asarray(arrays["Xz"]),
         lag_yield=jnp.asarray(arrays["lag_yield"]),
         year_idx=jnp.asarray(arrays["year_idx"]),
-        comarca_idx=jnp.asarray(arrays["comarca_idx"]),
         n_years=arrays["n_years"],
-        n_comarcas=arrays["n_comarcas"],
         y=jnp.asarray(arrays["y"]),
     )
 
     coords = {
         "basis": np.arange(arrays["Xz"].shape[1]),
         "year": arrays["year_levels"],
-        "comarca": arrays["comarca_levels"],
         "obs_id": np.arange(len(arrays["y"])),
     }
     dims = {
         "beta_coefs": ["basis"],
         "rw2_innovations": ["basis_minus2"],
         "year_re": ["year"],
-        "comarca_re": ["comarca"],
     }
     idata = az.from_numpyro(mcmc, coords=coords, dims=dims)
     summary = az.summary(idata, hdi_prob=args.hdi_prob)
@@ -368,11 +355,11 @@ def fit_one(
         "predictor": args.predictor,
         "include_year_re": include_year_re,
         "formula": (
-            f"yield_tha ~ f({args.predictor}_reduced_standardized) + "
-            "lag_yield + (1|comarca) [+ (1|year)]"
+            f"yield_tha_centered ~ f({args.predictor}_reduced_standardized) + "
+            "lag_yield_centered [+ (1|year)]"
         ),
         "n_obs": int(len(fit_df)),
-        "n_comarcas": int(arrays["n_comarcas"]),
+        "n_comarcas": int(len(arrays["comarca_levels"])),
         "n_years": int(arrays["n_years"]),
         "n_basis": int(arrays["Xz"].shape[1]),
         "draws": args.draws,
@@ -414,7 +401,7 @@ def fit_one(
         "predictor": args.predictor,
         "include_year_re": include_year_re,
         "n_obs": int(len(fit_df)),
-        "n_comarcas": int(arrays["n_comarcas"]),
+        "n_comarcas": int(len(arrays["comarca_levels"])),
         "n_years": int(arrays["n_years"]),
         "bad_rhat_count_gt_1.01": bad_rhat,
         "low_ess_bulk_count_lt_400": low_ess,

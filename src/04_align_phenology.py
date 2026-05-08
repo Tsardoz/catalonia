@@ -11,7 +11,9 @@ import sys
 import pandas as pd
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent))
-from utils.config import PROCESSED, FLOWERING_GDD, PIT_HARDENING_GDD, OIL_ACCUMULATION_GDD
+from utils.config import (
+    PROCESSED, PRE_FLOWERING_GDD, FLOWERING_GDD, PIT_HARDENING_GDD, OIL_ACCUMULATION_GDD,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -21,6 +23,15 @@ def main():
     PROCESSED.mkdir(parents=True, exist_ok=True)
 
     anchors = pd.DataFrame([
+        {
+            "stage": "pre_flowering",
+            "gdd_start": PRE_FLOWERING_GDD[0],
+            "gdd_end": PRE_FLOWERING_GDD[1],
+            "cultivar_group": "Arbequina (general)",
+            "source": "Sanz-Cortés et al. 2002 (Ann Appl Biol 140:151, BBCH 50-59); "
+                      "Didevarasl et al. 2023 (Plants 12:3181, sprouting phase)",
+            "notes": "Bud break through inflorescence development, T_b=10°C",
+        },
         {
             "stage": "flowering",
             "gdd_start": FLOWERING_GDD[0],

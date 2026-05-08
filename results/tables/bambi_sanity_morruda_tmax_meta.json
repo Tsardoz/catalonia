@@ -1,0 +1,42 @@
+{
+  "formula": "yield_tha ~ tmax_preflower_mean + tmax_flowering_mean + tmax_pit_mean + lag_yield + (1|comarca)",
+  "cohort": "morruda",
+  "predictor": "tmax",
+  "n_obs": 18,
+  "n_comarcas": 2,
+  "n_years": 9,
+  "draws": 1000,
+  "tune": 1000,
+  "chains": 4,
+  "target_accept": 0.9,
+  "bad_rhat_count_gt_1.01": 3,
+  "low_ess_bulk_count_lt_400": 3,
+  "stage_terms": [
+    "tmax_preflower_mean",
+    "tmax_flowering_mean",
+    "tmax_pit_mean"
+  ],
+  "contrast": {
+    "delta_name": "tmax_pit_mean - tmax_flowering_mean",
+    "delta_median": -0.5042621385061892,
+    "delta_q05": -0.8600014932415211,
+    "delta_q95": -0.11628658743293606,
+    "prob_delta_gt_0": 0.021,
+    "all_contrasts": [
+      {
+        "delta_name": "tmax_pit_mean - tmax_flowering_mean",
+        "delta_median": -0.5042621385061892,
+        "delta_q05": -0.8600014932415211,
+        "delta_q95": -0.11628658743293606,
+        "prob_delta_gt_0": 0.021
+      },
+      {
+        "delta_name": "tmax_flowering_mean - tmax_preflower_mean",
+        "delta_median": 0.19566133952359233,
+        "delta_q05": -0.18848972888497226,
+        "delta_q95": 0.5487627525891744,
+        "prob_delta_gt_0": 0.80975
+      }
+    ]
+  }
+}

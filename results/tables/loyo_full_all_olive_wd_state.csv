@@ -1,0 +1,2 @@
+cohort,predictor,held_out_year,stem,delta_median,delta_q_lo,delta_q_hi,prob_delta_gt_0
+all_olive,wd_state,full,numpyro_main_all_olive_wd_state_full,2.7696898180843367e-05,-3.930770995724488e-05,0.00011254356018710038,0.750125

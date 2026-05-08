@@ -77,22 +77,9 @@ def stem_name(
     return stem
 
 
-def run_step7(args: argparse.Namespace, exclude_year: int | None, suffix: str = "") -> str:
+def _build_step7_cmd(args: argparse.Namespace, exclude_year: int | None, suffix: str) -> list[str]:
+    """Build the Step 7 subprocess command list."""
     step7_path = "/home/tsardoz/phd/catalonia/src/07_fit_numpyro_main.py"
-    stem = stem_name(
-        cohort=args.cohort,
-        predictor=args.predictor,
-        no_year_re=args.no_year_re,
-        exclude_year=exclude_year,
-        suffix=suffix,
-    )
-    beta_t_path = __import__("pathlib").Path(
-        f"/home/tsardoz/phd/catalonia/results/posteriors/{stem}_beta_t_draws.npy"
-    )
-    if args.reuse_existing and beta_t_path.exists():
-        log.info(f"Reusing existing Step 7 artifacts for stem={stem}")
-        return stem
-
     cmd = [
         sys.executable,
         step7_path,
@@ -110,10 +97,51 @@ def run_step7(args: argparse.Namespace, exclude_year: int | None, suffix: str = 
         cmd.extend(["--exclude-year", str(int(exclude_year))])
     if suffix:
         cmd.extend(["--stem-suffix", suffix])
+    return cmd
 
-    log.info(f"Running Step 7 fit for stem={stem}")
-    subprocess.run(cmd, check=True)
+
+def run_step7(args: argparse.Namespace, exclude_year: int | None, suffix: str = "") -> str:
+    """Run a Step 7 fit blockingly (used for the full-data reference fit)."""
+    stem = stem_name(
+        cohort=args.cohort,
+        predictor=args.predictor,
+        no_year_re=args.no_year_re,
+        exclude_year=exclude_year,
+        suffix=suffix,
+    )
+    beta_t_path = __import__("pathlib").Path(
+        f"/home/tsardoz/phd/catalonia/results/posteriors/{stem}_beta_t_draws.npy"
+    )
+    if args.reuse_existing and beta_t_path.exists():
+        log.info(f"Reusing existing Step 7 artifacts for stem={stem}")
+        return stem
+
+    log.info(f"Running Step 7 fit (blocking) for stem={stem}")
+    subprocess.run(_build_step7_cmd(args, exclude_year, suffix), check=True)
     return stem
+
+
+def launch_step7(
+    args: argparse.Namespace, exclude_year: int, suffix: str = ""
+) -> tuple[str, "subprocess.Popen | None"]:
+    """Launch a Step 7 fold fit non-blockingly. Returns (stem, Popen) or (stem, None) if reused."""
+    stem = stem_name(
+        cohort=args.cohort,
+        predictor=args.predictor,
+        no_year_re=args.no_year_re,
+        exclude_year=exclude_year,
+        suffix=suffix,
+    )
+    beta_t_path = __import__("pathlib").Path(
+        f"/home/tsardoz/phd/catalonia/results/posteriors/{stem}_beta_t_draws.npy"
+    )
+    if args.reuse_existing and beta_t_path.exists():
+        log.info(f"Reusing existing Step 7 artifacts for stem={stem}")
+        return stem, None
+
+    log.info(f"Launching Step 7 fold fit (non-blocking) for stem={stem}")
+    proc = subprocess.Popen(_build_step7_cmd(args, exclude_year, suffix))
+    return stem, proc
 
 
 def window_masks(gdd_grid: np.ndarray, shift: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -230,11 +258,32 @@ def main():
     full_stem = run_step7(args=args, exclude_year=None, suffix="full")
     full = summarize_stem(stem=full_stem, shift=args.window_shift, hdi_prob=args.hdi_prob)
 
+    # Launch all fold fits simultaneously
+    fold_launches: list[tuple[int, str, "subprocess.Popen | None"]] = []
+    for y in years:
+        fold_stem, proc = launch_step7(args=args, exclude_year=y)
+        fold_launches.append((int(y), fold_stem, proc))
+
+    # Wait for all folds; collect failures
+    failed: list[int] = []
+    for y, fold_stem, proc in fold_launches:
+        if proc is None:
+            log.info(f"Fold {y}: reused existing artifacts (stem={fold_stem})")
+            continue
+        rc = proc.wait()
+        if rc != 0:
+            failed.append(y)
+            log.error(f"Fold {y} failed (stem={fold_stem}, return code={rc})")
+        else:
+            log.info(f"Fold {y} complete (stem={fold_stem})")
+    if failed:
+        raise RuntimeError(f"LOYO fold(s) failed for years: {failed}. Check stderr above.")
+
+    # Summarise
     rows = []
     fold_beta_medians: dict[int, np.ndarray] = {}
     fold_delta_medians: dict[int, float] = {}
-    for y in years:
-        fold_stem = run_step7(args=args, exclude_year=y, suffix="")
+    for y, fold_stem, _ in fold_launches:
         fold = summarize_stem(stem=fold_stem, shift=args.window_shift, hdi_prob=args.hdi_prob)
         fold_beta_medians[int(y)] = np.median(fold["beta_t"], axis=0)
         fold_delta_medians[int(y)] = fold["delta_median"]

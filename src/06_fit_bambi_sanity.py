@@ -75,8 +75,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--year-re",
         action="store_true",
-        help="Add (1|year) random effect alongside lag_yield (sensitivity check only; "
-             "the two collide and lag_yield collapses to zero).",
+        help="Add (1|year) random effect (absorbs common-year shocks; "
+             "note: lag_yield and year RE partially collide at comarca scale).",
     )
     return parser.parse_args()
 
@@ -229,12 +229,14 @@ def fit_model(
     fixed_terms: list[str],
     args: argparse.Namespace,
 ):
-    """Fit Bambi mixed-effects sanity model."""
+    """Fit Bambi mixed-effects sanity model.
+
+    Comarca RE is omitted: yield_tha is comarca-mean centered in Step 1,
+    so there is no between-comarca variance left to absorb.
+    """
     rhs = " + ".join(fixed_terms + ["lag_yield"])
-    re_terms = "(1|comarca)"
-    if args.year_re:
-        re_terms = "(1|year) + (1|comarca)"
-    formula = f"yield_tha ~ {rhs} + {re_terms}"
+    re_terms = " + (1|year)" if args.year_re else ""
+    formula = f"yield_tha ~ {rhs}{re_terms}"
     log.info(f"Fitting model: {formula}")
 
     model = bmb.Model(formula, data=model_df, family="gaussian")
