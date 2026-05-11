@@ -25,9 +25,9 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
 
 
-def build_gdd_grid() -> np.ndarray:
-    """Common GDD grid: 0 to GDD_UPPER in GDD_STEP increments."""
-    return np.arange(GDD_GRID_MIN, GDD_UPPER + GDD_STEP, GDD_STEP, dtype=float)
+def build_gdd_grid(gdd_upper: float = GDD_UPPER) -> np.ndarray:
+    """Common GDD grid: 0 to gdd_upper in GDD_STEP increments."""
+    return np.arange(GDD_GRID_MIN, gdd_upper + GDD_STEP, GDD_STEP, dtype=float)
 
 
 def recompute_gdd(climate: pd.DataFrame, base_temp: float) -> pd.DataFrame:
@@ -68,9 +68,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--base", type=float, default=BASE_TEMP,
                         help=f"Base temperature °C (default {BASE_TEMP})")
+    parser.add_argument("--gdd-upper", type=float, default=GDD_UPPER,
+                        help=f"GDD upper bound (default {GDD_UPPER})")
     args = parser.parse_args()
 
-    gdd_grid = build_gdd_grid()
+    gdd_grid = build_gdd_grid(gdd_upper=args.gdd_upper)
     n_grid = len(gdd_grid)
     log.info(f"GDD grid: {gdd_grid[0]:.0f} to {gdd_grid[-1]:.0f}, "
              f"{n_grid} points, step={GDD_STEP}")

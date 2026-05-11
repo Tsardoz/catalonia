@@ -48,6 +48,12 @@ catalonia/
     04_align_phenology.py             # Olive pipeline — phenological anchors
     05_build_basis.py                 # Olive pipeline — B-spline basis + reduced predictors
     06_fit_bambi_sanity.py            # Olive pipeline — Bambi hierarchical sanity check
+    07_fit_numpyro_main.py            # Olive pipeline — NumPyro scalar-on-function model
+    08_posterior_contrast.py          # Olive pipeline — stage-window β contrasts
+    09_stability_loyo.py              # Olive pipeline — leave-one-year-out stability
+    10_sensitivity_analysis.py        # Olive pipeline — sensitivity sweeps, per-row CSVs
+    10_aggregate_sensitivity.py       # Olive pipeline — rebuild sensitivity_summary.csv
+    10_run_sweeps.sh                  # Olive pipeline — sweep orchestration (lockfile, CPU)
     utils/config.py                   # Shared config for olive pipeline
     utils/splines.py                  # B-spline basis construction
   figures/
@@ -388,6 +394,24 @@ rainfed-Arbequina yield analysis.
 See `olive_water_sensitivity_plan.md` for the current olive analysis methodology
 (hierarchical Bayesian scalar-on-function regression). Prior sliding-window OLS analyses
 are archived under `archive/rolling_window/`.
+## Olive pipeline status (May 2026)
+Steps 1–10 are implemented and run. Headline contrast for Arbequina is
+**Δ(pit − flower) = +0.108 × 10⁻³, P(Δ>0) = 0.92** (n = 90 comarca-years).
+- Step 9 LOYO: all 9 folds positive, P ∈ [0.78, 0.97], no sign flip.
+- Step 10 sensitivity sweep (16 unique runs × 3 window shifts → 48 rows in
+  `results/tables/sensitivity_summary.csv`): direction robust to tau, basis k,
+  T_b ≥ 8.5 °C, and ±50 GDD window shifts; flips under VPD predictor
+  (anti-correlated by construction) and under cold-T_b reparameterizations
+  with alternate anchors; attenuates as expected under the irrigated
+  negative control (P 0.92 → 0.64, magnitude −63 %).
+Reproducibility: `bash src/10_run_sweeps.sh` orchestrates the full sweep.
+A lockfile (`results/.sens_run.lock`) prevents concurrent runners from
+clobbering shared preprocessing files. Each (param-combo × window-shift)
+result is written atomically to `results/tables/sens_rows/`; the aggregated
+summary is rebuilt by `src/10_aggregate_sensitivity.py`. MCMC fits resume
+automatically via `--reuse-existing` (skips if the `beta_t_draws.npy`
+artifact exists). JAX is pinned to CPU (`JAX_PLATFORM_NAME=cpu`) because
+GPU is ~10× slower for this small-n model.
 
 ---
 

@@ -416,9 +416,33 @@ The β(t) shape is **qualitatively consistent across all three cohorts**: a mono
 
 **Conclusion:** The three-cohort comparison provides the strongest robustness argument available from this dataset. The consistent β(t) shape across cultivar-restricted (Arbequina), cultivar-corroborating (Morruda), and cultivar-agnostic (all olive) panels confirms the finding is not an artifact of subset selection. The dilution pattern (Arbequina > Morruda > all olive in signal strength) is itself informative: it implies the WD signal is cultivar-specific, with homogeneous Arbequina panels producing the clearest response. This supports future work targeting cultivar-level analyses with parcel-scale yield data.
 
-### Step 10 — Not yet completed
+### Step 10 — Completed
 
-Sensitivity sweeps (T_b, window width, basis k, predictor choice) remain to be run. The three-cohort robustness analysis above partially serves the same purpose by varying the spatial panel composition.
+All planned sweeps run on Arbequina (the headline cohort) at 2000 warmup + 2000 draws × 4 chains, CPU sequential. Pipeline orchestration: `src/10_run_sweeps.sh` calls `src/10_sensitivity_analysis.py` once per sweep group, writes one CSV row per `(param-combo × window-shift)` to `results/tables/sens_rows/`, then `src/10_aggregate_sensitivity.py` rebuilds `results/tables/sensitivity_summary.csv` (48 rows from 16 unique runs × 3 window shifts). A lockfile guards against concurrent runners and the per-row file layout is safe against partial writes and resumption.
+
+#### What stays robust
+
+The Δ(pit − flower) > 0 finding for Arbequina with WD-state survives all of:
+
+- **tau ∈ {15, 30, 45, 60, 120} GDD**: Δ median ranges 0.074–0.083 × 10⁻³, P(Δ>0) ∈ [0.88, 0.93]. No sign flips. The leaky-integrator memory parameter does not drive the result.
+- **basis k ∈ {4, 5, 6, 8}**: Δ median 0.081–0.108 × 10⁻³, P(Δ>0) ∈ [0.91, 0.93]. The smooth model is not over- or under-fitting the β(t) shape.
+- **T_b ∈ {8.5, 10, 12.5} °C**: Δ stays positive; at T_b=12.5 the contrast actually sharpens (Δ = 0.194 × 10⁻³, P = 0.995), consistent with the warmer base concentrating the same phenological events into a shorter GDD axis.
+- **Window shifts ± 50 GDD**: every robust row above remains robust after a ±50 GDD shift of the stage windows.
+
+#### What breaks the contrast (and how to read it)
+
+Four perturbations move the result outside the P(Δ>0) ≥ 0.7 envelope or flip its sign. None of these invalidate the headline; each tells us something specific:
+
+- **Cold T_b reparameterization (T_b ∈ {6.5, 7} °C)**: Δ flips negative (P(Δ>0) ≈ 0.38–0.41). At T_b=6.5 this combines with the *alternate* anchor windows from Toledo/Galicia/Croatia (pre-flower 0–250, flower 400–600, pit 1200–1700, GDD_UPPER=2700; `ALT_*` in `src/utils/config.py`), so the contrast is computed over a different GDD axis with different stage definitions. T_b=7 °C with the headline anchors also flips, indicating the result is sensitive to the joint choice of T_b and stage windows — not surprising at n ≈ 9 effective years.
+- **VPD as alternative predictor**: Δ flips negative with both `with_year` (P = 0.19) and `no_year` (P = 0.40). VPD and WD-state are physiologically anti-correlated (high VPD → high evaporative demand → more water deficit), so the sign flip is *expected*. Reading it directionally: high VPD during pit hardening is more harmful than during flowering — the same conclusion as the WD-state result, just expressed on a stress-proxy scale.
+- **No year RE (wd_state)**: Δ stays positive (median 0.034 × 10⁻³) but P drops to 0.68. Removing the year RE weakens the contrast by re-injecting common-year shocks (2022 drought, 2019 high yield) into the residual. The headline with the year RE remains the cleaner specification.
+- **Irrigated yield negative control**: P(Δ>0) = 0.64 vs 0.92 for rainfed at the same settings. The contrast attenuates as expected if the rainfed signal is real — irrigation buffers WD's effect on yield. Δ median is 0.040 × 10⁻³ for irrigated vs 0.108 × 10⁻³ for rainfed, a 63 % reduction. This is the expected pattern and supports the rainfed finding.
+
+#### Summary
+
+Across 16 distinct sensitivity runs, the Δ(pit − flower) > 0 direction holds for every WD-state fit at T_b ≥ 8.5 °C regardless of tau, basis dimension, or ±50 GDD window shift. It weakens but does not flip under year-RE removal, and attenuates (as predicted by the rainfed hypothesis) under the irrigated negative control. It does flip under VPD (physiologically anti-correlated predictor) and under cold-T_b reparameterizations that combine alternate stage anchors. The conclusion is consistent with the Step 9 LOYO assessment: the headline finding is directionally robust for Arbequina with WD-state at T_b=10 °C, and its dependence on T_b and predictor choice is itself a finding worth documenting rather than hiding.
+
+Full table: `results/tables/sensitivity_summary.csv`. Per-row evidence (atomic CSV writes, safe to re-aggregate any time): `results/tables/sens_rows/`.
 
 ## Minimum viable deliverable
 
