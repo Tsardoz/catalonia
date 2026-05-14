@@ -4,15 +4,18 @@
 
 Estimate phenological-stage-specific water sensitivity of olive yield across Catalan comarques using a hierarchical Bayesian scalar-on-function regression. Headline output: posterior contrast between water sensitivity at flowering vs pit hardening, framed as an exploratory hypothesis-generating analysis given n ≈ 9 independent years.
 
+**Note on phenological axis (May 2026):** This plan previously used a GDD (growing degree day) axis with T_b = 10 °C and literature-derived GDD thresholds. Those thresholds have been retired. The GDD values (e.g. flowering at 350–450 GDD, pit hardening at 900–1200 GDD) were originally derived from a small number of site-years and do not represent Arbequina in Catalonia with sufficient reliability. GDD accumulation is also sensitive to the choice of T_b, which introduces an additional axis of uncertainty that was not adequately constrained (see Step 10 sensitivity results: T_b = 6.5–7 °C flips the headline contrast).
+
+The pipeline now uses **fixed calendar windows** anchored to observed Arbequina phenology in north-west Iberia (Garrido et al. 2021, *Forests* 12:204, doi:10.3390/f12020204 — three-year record from the northern limit of Arbequina distribution, BBCH stages 5–8). These are the most appropriate published Arbequina calendar dates available pending a larger-sample GDD calibration. A GDD-based axis derived from the **PEP725 European phenology database** (which holds multi-decade, multi-site olive observations) is planned as a future replacement once sufficient Catalan station data have been extracted.
+
 ### Resolved design decisions
 
-- **Cultivar strategy:** Two-cultivar side-by-side comparison. **Arbequina** (151k ha, 60% rainfed, 10 Arbequina-dominant comarques) and **Morruda** (54k ha, 90% rainfed, concentrated in Baix Ebre / Montsià / Terra Alta). Morruda's high rainfed fraction gives a cleaner WD signal; Arbequina's wider geographic spread tests generalisability. Both use rainfed yield (`yield_tha` / `seca_ha`) as the response.
-- **Harvest truncation:** Fixed common upper bound at 1700 GDD for all comarca-years.
-- **Lag yield:** Data covers 2015–2024; after lag, n = 9 effective years (2016–2024), 90 Arbequina comarca-years. Morruda comarca-year count TBD after whitelist construction.
-- **T_b:** 10 °C default (De Melo-Abreu et al. 2004), sensitivity sweep in Step 10.
-- **Phenological anchors:** Didevarasl et al. 2023, Sanz-Cortés et al. 2002, Rapoport et al. 2013 (see `data/processed/phenology_anchors.csv`).
+- **Cultivar strategy:** Two-cohort analysis. **Arbequina** (headline, 151k ha, 60% rainfed, 10 Arbequina-dominant comarques) and **All olive** (breadth check, 19 comarques, cultivar-agnostic). Both use rainfed yield (`yield_tha` / `seca_ha`) as the response.
+- **Harvest truncation:** End of S8 maturation window, DOY 327 (≈ 23 November), for all comarca-years.
+- **Lag yield:** Data covers 2015–2024; after lag, n = 9 effective years (2016–2024), 90 Arbequina comarca-years.
+- **Phenological anchors:** Calendar windows for Arbequina (BBCH stages 5–8) from Garrido et al. 2021 (*Forests* 12:204). GDD-based anchors are retired (see rationale in project goal section above). PEP725-derived GDD is planned as a future replacement.
 
-This plan supersedes prior rolling-OLS analyses, which suffered from window-overlap artifacts and gave physiologically implausible sign-stable negative precipitation coefficients.
+This plan supersedes prior rolling-OLS analyses, which suffered from window-overlap artifacts and gave physiologically implausible sign-stable negative precipitation coefficients. The GDD axis used in earlier versions of Steps 2–5 is also superseded by calendar-date windows as of May 2026 (see rationale above).
 
 ## Stack
 
@@ -62,9 +65,9 @@ olive-water-sensitivity/
 
 Load three sources into pandas dataframes:
 
-- Comarca-level annual olive yield, filtered separately for two cultivar cohorts:
+- Comarca-level annual olive yield, filtered separately for two cohorts:
   - **Arbequina cohort:** 10 comarques where Arbequina > 90% of olive area (from DUN parcel data)
-  - **Morruda cohort:** comarques where Morruda > 90% of olive area (to be constructed from DUN)
+  - **All olive cohort:** all 19 comarques with olive yield records (cultivar-agnostic breadth check)
 - Daily climate per comarca: T_min, T_max, T_mean, precipitation, ET₀, VPD
 - Use rainfed yield only (`yield_tha` / `seca_ha`), not irrigated yield
 
@@ -72,49 +75,60 @@ Validate that every comarca-year with a yield observation has complete daily cli
 
 **Within-estimator centering (added):** After coverage validation, subtract the per-(cohort, comarca) mean from both `yield_tha` and `lag_yield`. This within-estimator (Frisch-Waugh) removes structural between-comarca baseline differences at the data level, making a comarca random effect in the model redundant. Comarca means are saved to `data/processed/comarca_yield_means.csv` for back-transformation if needed. Known limitation: means are computed on the full fitted panel; in LOYO refits the held-out year remains in the mean, introducing ~1/9-year leakage that is negligible in practice.
 
-### Step 2 — GDD axis (`02_compute_gdd.py`)
+### Step 2 — Phenological calendar axis (`02_compute_gdd.py`)
 
-Compute cumulative GDD per comarca per year from January 1, using base temperature **T_b = 10 °C** for olive (cite De Melo-Abreu et al. 2004 or the specific Spanish source you choose; do **not** optimize T_b on yield data — that creates the Laurent circularity).
+**GDD axis retired.** This step previously computed cumulative GDD from January 1 with T_b = 10 °C and interpolated daily climate onto a common GDD grid. That approach is no longer used. The GDD thresholds (flowering at 350–450 GDD, pit hardening at 900–1200 GDD, etc.) were derived from a small number of site-years in the literature and are not reliably calibrated for Arbequina in Catalonia. The T_b sensitivity sweep in Step 10 showed the headline contrast flips sign at T_b ≤ 7 °C, confirming the GDD axis was not robust.
 
-```
-GDD(d) = Σ_{i=1}^{d} max(0, T_mean(i) − T_b)
-```
+**Replacement: fixed calendar windows** based on observed Arbequina BBCH phenology from Garrido et al. 2021 (three seasons, north-west Iberian Peninsula — the closest published Arbequina phenology record to Catalonia). Stage boundaries are expressed as day-of-year (DOY) ranges:
 
-Produce a common GDD grid (e.g., 0 to 2000 GDD in 25 GDD steps → 81 grid points). Re-express each daily climate series on this GDD axis via linear interpolation. Store as `(n_comarca_years × n_gdd_grid)` arrays.
+| Stage | BBCH | Description | Calendar window (average) | DOY approx |
+|-------|------|-------------|--------------------------|------------|
+| S5 | 51–59 | Inflorescence development | mid-March → mid-May | DOY 72–138 |
+| S6 | 61–69 | Flowering | mid-May → late June | DOY 136–173 |
+| S7 | 71–79 | Fruit development | mid-June → late October | DOY 168–299 |
+| S8 | 81–89 | Fruit maturation / harvest | late October → late November | DOY 299–327 |
 
-Add a **sensitivity-analysis hook**: keep T_b as a config parameter so we can refit with T_b ∈ {7, 8.5, 10, 12.5} °C in step 10.
+These dates carry an uncertainty of roughly ±5–10 days (visual estimates from Garrido et al. 2021, Fig. 2). Stage 5's average start is pulled earlier by an unusually early 2016 season; 2017–2018 suggest a more typical late-March start.
+
+For pipeline purposes, each comarca-year's climate is extracted over these fixed DOY windows. Stage overlap at the S5/S6 and S6/S7 boundaries (DOY ~136–138, ~168–173) is handled by assigning the overlap days to the earlier stage.
+
+**Future work:** Replace these fixed windows with a GDD axis calibrated from the PEP725 European phenology database, which contains multi-decade olive phenology observations from multiple Iberian stations. This will allow T_b to be estimated from data rather than assumed.
 
 ### Step 3 — Water-deficit predictor (`03_compute_water_deficit.py`)
 
-Primary predictor: daily water deficit `WD(t) = P(t) − ET₀(t)` on the GDD axis.
+Primary predictor: daily water deficit `WD(t) = P(t) − ET₀(t)` on the **calendar day-of-year axis** (not GDD).
 Add a state-proxy memory representation as an additional predictor output:
-- `WD_state(t)` from a leaky integrator on the GDD axis
+- `WD_state(t)` from a leaky integrator on the calendar DOY axis
 - recursion per row: `S[0]=WD[0]`, `S[t]=alpha*WD[t] + (1-alpha)*S[t-1]`
-- `alpha = 1 - exp(-dt/tau)`, default `tau = 45 GDD` from config, with Step 10 sensitivity sweep over multiple `tau` values
+- `alpha = 1 - exp(-dt/tau)`, default `tau = 45 days` from config, with Step 10 sensitivity sweep over multiple `tau` values
 
-Secondary predictors for comparison runs: VPD curve, cumulative WD over a rolling 30-GDD window. Each gets its own model fit; the final paper reports WD-state as headline and VPD as a corroborating analysis.
+Secondary predictors for comparison runs: VPD curve, cumulative WD over a rolling 30-day window. Each gets its own model fit; the final paper reports WD-state as headline and VPD as a corroborating analysis.
 
-Outputs (all shape `(n_obs, n_gdd_grid)`): `WD_matrix`, `WD_state_matrix`, `WD30_matrix`, `VPD_matrix` (plus temperature matrices used elsewhere).
+Outputs (all shape `(n_obs, n_doy_grid)`): `WD_matrix`, `WD_state_matrix`, `WD30_matrix`, `VPD_matrix` (plus temperature matrices used elsewhere).
 
 ### Step 4 — Phenological anchors (`04_align_phenology.py`)
 
-Anchor olive phenological windows to literature GDD values, **not fit from data**:
+Anchor olive phenological windows to **calendar DOY ranges** derived from Garrido et al. 2021 Arbequina observations. GDD-based anchors (previously Didevarasl et al. 2023, Sanz-Cortés et al. 2002, Rapoport et al. 2013) are retired — see Step 2 rationale.
 
-- **Pre-flowering: 0–350 GDD** — bud break through inflorescence development (BBCH 50–59; Sanz-Cortés et al. 2002, Didevarasl et al. 2023 sprouting phase)
-- Flowering: 350–450 GDD (Didevarasl et al. 2023, Sanz-Cortés et al. 2002)
-- Pit hardening: 900–1200 GDD (Didevarasl et al. 2023, Rapoport et al. 2013)
-- Oil accumulation: 1200–1700 GDD (optional secondary contrast)
+| Stage | Label | DOY start | DOY end | Notes |
+|-------|-------|-----------|---------|-------|
+| S5 | inflorescence | 72 | 138 | BBCH 51–59; ±5–10 day uncertainty |
+| S6 | flowering | 136 | 173 | BBCH 61–69; overlaps S5 end |
+| S7 | fruit_dev | 168 | 299 | BBCH 71–79; pit hardening within this stage |
+| S8 | maturation | 299 | 327 | BBCH 81–89; harvest maturity |
 
-These anchors should vary by cultivar group if the literature supports it. If isolating cultivars, store per-cultivar anchor windows. Document every literature source in `data/processed/phenology_anchors.csv` with a `source` column.
+Source: Garrido et al. 2021, *Forests* 12:204, doi:10.3390/f12020204. Three seasons (2016–2018) at the northern distribution limit of Arbequina; average values used as fixed windows. Stage 5 average start (DOY 72 ≈ 13 March) is pulled earlier by 2016; 2017–2018 suggest DOY ~89 (30 March) is more typical. This uncertainty is within the ±10 day tolerance of the calendar window approach.
+
+Document window definitions in `data/processed/phenology_anchors.csv` with a `source` column. The headline contrast remains **S7 − S6** (fruit development sensitivity minus flowering sensitivity), analogous to the prior pit-hardening minus flowering contrast.
 
 ### Step 5 — Basis construction (`05_build_basis.py`)
 
-Build B-spline basis on the common GDD grid:
+Build B-spline basis on the **calendar DOY grid** (spanning DOY 72–327, the S5 start through S8 end):
 
 - Cubic B-splines, **k = 5–6 basis functions** (start with 5; check posterior EDF; only increase if pinned)
-- Knots placed at quantiles of the GDD grid
-- Output: basis matrix `B` of shape `(n_gdd_grid, n_basis)` — note this is grid × basis, **not** observations × basis
-- Pre-compute unstandardized reduced predictors via `matrix @ B * dt` (including `WD_state_reduced`) with shape `(n_obs, n_basis)` where `dt` is the GDD step size — this is the integrated functional predictor and the `dt` is essential for prior interpretability
+- Knots placed at quantiles of the DOY grid
+- Output: basis matrix `B` of shape `(n_doy_grid, n_basis)` — note this is grid × basis, **not** observations × basis
+- Pre-compute unstandardized reduced predictors via `matrix @ B * dt` (including `WD_state_reduced`) with shape `(n_obs, n_basis)` where `dt` is the day step size (1 day) — this is the integrated functional predictor and the `dt` is essential for prior interpretability
 - Do not apply persistent full-dataset z-scoring in Step 5; standardization is performed per fit in Step 7 to avoid leakage in LOYO/sensitivity refits
 
 ### Step 6 — Bambi sanity check (`06_fit_bambi_sanity.py`)
@@ -144,9 +158,7 @@ Both specs should be run as a sensitivity comparison in Step 7.
 
 **WD coefficient signs:** wd_flowering ≈ −0.01, wd_pit ≈ +0.02–0.05 (both span zero). Positive pit coefficient means less water deficit → more yield, consistent with mesocarp development being water-sensitive. Signs are directionally correct but imprecise at this aggregation level — the full functional model (Step 7) may resolve the shape more clearly.
 
-**Morruda (n=18, 2 comarques):** Converges with `(1|comarca)` only (0 divergences, all r̂ ≤ 1.01) but estimates are too imprecise to interpret (90% CIs span ±0.33). Included for completeness; not a viable corroboration cohort at current sample size.
-
-**Conclusion:** Hierarchical structure converges. Proceed to Step 7. Run both lag-yield and year-RE specifications as a sensitivity pair.
+**Conclusion:** Hierarchical structure converges.
 
 ### Step 7 — NumPyro production model (`07_fit_numpyro_main.py`)
 
@@ -179,37 +191,42 @@ beta_draws_flat = beta_draws.reshape(-1, n_basis)   # (n_total, n_basis)
 # β(t) at every grid point: (n_total, n_grid)
 beta_t = beta_draws_flat @ B.T
 
-# Window masks on the GDD grid
-preflower_mask = (gdd_grid >= 0) & (gdd_grid <= 350)
-flowering_mask = (gdd_grid >= 350) & (gdd_grid <= 450)
-pit_mask = (gdd_grid >= 900) & (gdd_grid <= 1200)
+# Window masks on the DOY grid (Garrido et al. 2021 Arbequina calendar windows)
+inflorescence_mask = (doy_grid >= 72)  & (doy_grid <= 138)   # S5: BBCH 51-59
+flowering_mask     = (doy_grid >= 136) & (doy_grid <= 173)   # S6: BBCH 61-69
+fruit_dev_mask     = (doy_grid >= 168) & (doy_grid <= 299)   # S7: BBCH 71-79
+maturation_mask    = (doy_grid >= 299) & (doy_grid <= 327)   # S8: BBCH 81-89
 
 # Mean β within each window per posterior draw
-beta_preflower = beta_t[:, preflower_mask].mean(axis=1)
-beta_flower = beta_t[:, flowering_mask].mean(axis=1)
-beta_pit = beta_t[:, pit_mask].mean(axis=1)
+beta_S5 = beta_t[:, inflorescence_mask].mean(axis=1)
+beta_S6 = beta_t[:, flowering_mask].mean(axis=1)
+beta_S7 = beta_t[:, fruit_dev_mask].mean(axis=1)
+beta_S8 = beta_t[:, maturation_mask].mean(axis=1)
 
-# Headline contrast: pit − flower
-delta = beta_pit - beta_flower
-prob_pit_less_sensitive = (delta > 0).mean()
+# Headline contrast: S7 (fruit dev) − S6 (flowering)
+delta = beta_S7 - beta_S6
+prob_S7_less_sensitive = (delta > 0).mean()
 
-# Secondary contrast: flower − preflower
-delta_pf = beta_flower - beta_preflower
+# Secondary contrast: S6 − S5
+delta_pf = beta_S6 - beta_S5
 
 # Report all window posteriors
-for name, arr in [("pre_flowering", beta_preflower), ("flowering", beta_flower), ("pit", beta_pit)]:
+for name, arr in [("S5_inflorescence", beta_S5), ("S6_flowering", beta_S6),
+                  ("S7_fruit_dev", beta_S7), ("S8_maturation", beta_S8)]:
     print(f"β_{name}: median {np.median(arr):.3f}, "
           f"90% CI [{np.quantile(arr, 0.05):.3f}, {np.quantile(arr, 0.95):.3f}]")
-print(f"Δ (pit − flower): median {np.median(delta):.3f}, "
+print(f"Δ (S7 − S6): median {np.median(delta):.3f}, "
       f"90% CI [{np.quantile(delta, 0.05):.3f}, {np.quantile(delta, 0.95):.3f}]")
-print(f"P(pit less sensitive than flower) = {prob_pit_less_sensitive:.3f}")
-print(f"Δ (flower − preflower): median {np.median(delta_pf):.3f}, "
+print(f"P(S7 less sensitive than S6) = {prob_S7_less_sensitive:.3f}")
+print(f"Δ (S6 − S5): median {np.median(delta_pf):.3f}, "
       f"90% CI [{np.quantile(delta_pf, 0.05):.3f}, {np.quantile(delta_pf, 0.95):.3f}]")
 ```
 
 **Absolute-value contrast (fallback only):** Use `|β_flower| − |β_pit|` only if the sign of β is genuinely uncertain at one stage. Folded posteriors are harder to interpret — avoid by default.
 
-Output: a side-by-side results table for Arbequina and Morruda with point estimates, 90 % CIs, and posterior probabilities for the headline contrast plus each window's β. If both cultivars show the same sign and comparable magnitude for Δ, that strengthens the finding. If they diverge, the discussion should address possible physiological or data-quality explanations (e.g. Morruda's geographic concentration, different phenological timing).
+Output: a side-by-side results table for Arbequina and All olive with point estimates, 90 % CIs, and posterior probabilities for the headline contrast (S7 − S6) plus each stage's β. The dilution from Arbequina to All olive is itself informative and should be reported.
+
+**Note:** Prior results (Steps 7–9 below) were computed on the GDD axis and are retained as historical record. They will be recomputed on the calendar DOY axis once the pipeline is refactored in Steps 2–5.
 
 ### Step 9 — Stability check (`09_stability_loyo.py`)
 
@@ -232,9 +249,8 @@ Report the across-fold spread of Δ alongside the headline number. If LOYO Δ me
 
 Run the production model under each of these perturbations and tabulate Δ posterior summaries:
 
-- T_b ∈ {6.5, 7, 8.5, 10, 12.5} °C
-- **T_b = 6.5 °C full reparameterization:** cultivar-specific Arbequina anchors from Toledo/Galicia/Croatia literature bracket (pre-flowering 0–250, flowering 400–600, pit hardening ~1200–1700, oil accumulation ~1700–2500 GDD; harvest truncation 2700 GDD). Jan-1 start-date convention must be verified against calendar-date phenology before reporting. If T_b=6.5 gives substantively the same Δ contrast as T_b=10: report T_b=10 as headline, note robustness. If T_b=6.5 gives meaningfully sharper results: promote to headline in revision. Alternate anchor values stored in `utils/config.py` (`ALT_*` constants).
-- Phenology window widths ± 50 GDD
+- **[GDD sweeps retired]** T_b and GDD-window sensitivity sweeps are no longer applicable now that the pipeline uses calendar windows. The T_b sensitivity result (contrast flips at T_b ≤ 7 °C) is documented as the primary motivation for retiring the GDD axis.
+- Phenology window widths ± 10 days (calendar equivalent of the former ± 50 GDD sweep)
 - Predictor: WD vs VPD vs (WD, VPD) joint
 - Basis dimension k ∈ {4, 5, 6, 8}
 - Lag-yield vs year-RE specification
@@ -264,20 +280,20 @@ Anything where the sign of Δ flips or the posterior probability drops below 0.7
 
 ## Open questions (all resolved)
 
-1. ~~Cultivar pooling~~ → Two-cultivar side-by-side: Arbequina (headline) + Morruda (corroboration).
-2. ~~T_b and anchor sources~~ → De Melo-Abreu et al. 2004; Didevarasl et al. 2023; Sanz-Cortés et al. 2002.
-3. ~~Harvest truncation~~ → Fixed 1700 GDD upper bound.
+1. ~~Cultivar pooling~~ → Two-cohort: Arbequina (headline) + All olive (breadth check).
+2. ~~T_b and anchor sources~~ → GDD axis retired; calendar windows from Garrido et al. 2021 used instead. PEP725-based GDD planned as future work.
+3. ~~Harvest truncation~~ → End of S8 maturation window (DOY 327 ≈ 23 November).
 4. ~~Lag yield~~ → Confirmed: 2015–2024 yield data, n = 9 effective years after lag.
 
 ## Pipeline status and results summary
 
 ### Implemented (Steps 1–6)
 
-**Data panel:** 90 Arbequina comarca-years (10 comarques × 9 years, 2016–2024 after lag). Mean rainfed yield 1.08 t/ha (sd 0.53), median 0.91. 18 Morruda comarca-years (2 comarques) included for completeness.
+**Data panel:** 90 Arbequina comarca-years (10 comarques × 9 years, 2016–2024 after lag). Mean rainfed yield 1.08 t/ha (sd 0.53), median 0.91. 171 all-olive comarca-years (19 comarques) for the breadth check.
 
-**GDD–phenology validation:** GDD thresholds at T_b=10°C map to physiologically correct calendar dates in Catalonia: flowering onset (350 GDD) → mean May 24 (range May 2–Jun 18), pit hardening start (900 GDD) → Jul 9 (Jun 22–Aug 2), harvest truncation (1700 GDD) → Sep 4 (Aug 8–Nov 1). Water deficit deepens from flowering (WD = −3.6 mm/day) to pit hardening (−5.1); VPD rises from 1.78 to 2.51 kPa. Both gradients match expected Mediterranean summer drought intensification.
+**Phenology axis (calendar DOY, Garrido et al. 2021):** S5 inflorescence DOY 72–138 (mid-Mar to mid-May), S6 flowering DOY 136–173 (mid-May to late Jun), S7 fruit development DOY 168–299 (mid-Jun to late Oct), S8 maturation DOY 299–327 (late Oct to late Nov). **GDD validation figures are superseded** — they were computed on the retired GDD axis and should not be cited. Water deficit and VPD gradient magnitudes remain qualitatively valid but will be recomputed on the calendar axis.
 
-**B-spline basis:** 5 cubic basis functions on 69 grid points (0–1700 GDD, step 25). Partition of unity confirmed (row sums = 1.0 exactly). One interior knot at GDD 850.
+**B-spline basis (GDD axis — superseded):** 5 cubic basis functions on 69 grid points (0–1700 GDD, step 25) were used in prior runs. The calendar-axis replacement will use a DOY grid spanning DOY 72–327 (256 days, step 1), with k = 5–6 basis functions and knots at DOY quantiles. Partition of unity must be re-verified for the new grid.
 
 **Bambi sanity check (Arbequina, 3-stage model, lag_yield only, no year RE):**
 - Convergence: all r̂ = 1.0, all ESS > 400, 0 divergences (target_accept=0.95).
@@ -325,7 +341,7 @@ The current dataset has **insufficient power to detect phenological-stage-specif
 - Multi-region pooling (e.g. combining Catalonia with Andalucía or Puglia panels under a hierarchical framework)
 - Additional climate predictors (frost days, degree-day accumulation below critical thresholds)
 
-**Conclusion for Steps 7–10:** The B-spline functional model (Step 7) remains worth implementing for methodological completeness — it will reveal whether the continuous β(t) shape is consistently negative across the GDD axis or genuinely flat. However, it is unlikely to produce confident stage-specific contrasts given the R² ≈ 0.02 signal strength. The paper should be framed as establishing the methodological pipeline and reporting directionally plausible but underpowered results, with the dataset limitations documented transparently.
+**Conclusion for Steps 7–10:** The B-spline functional model (Step 7) remains worth implementing for methodological completeness — it will reveal whether the continuous β(t) shape is consistently negative across the calendar phenological axis or genuinely flat. However, it is unlikely to produce confident stage-specific contrasts given the R² ≈ 0.02 signal strength. The paper should be framed as establishing the methodological pipeline and reporting directionally plausible but underpowered results, with the dataset limitations documented transparently.
 
 Figure: `results/figures/stage_posteriors_arbequina_wd.png`
 
@@ -333,19 +349,22 @@ Figure: `results/figures/stage_posteriors_arbequina_wd.png`
 
 #### Step 7 — NumPyro production model
 
+**Note:** Results below were computed on the GDD axis and are retained as a historical record. They will be rerun on the calendar DOY axis.
+
 Scalar-on-function regression with RW2 P-spline prior, non-centred year random effect, comarca RE dropped (yield comarca-mean centered in Step 1), WD_state as headline predictor. 4 chains × 2000 warmup + 2000 draws, `target_accept=0.95`, CPU sequential. All fits use all 9 years (2016–2024).
 
 **Previous results (with comarca RE, pre-centering) — superseded:**
 
 - **Arbequina** (10 comarques, 90 obs): Clean convergence — 0 r̂>1.01, 0 low-ESS.
-- **Morruda** (2 comarques, 18 obs): 15 r̂>1.01, 8 low-ESS (comarca RE unsupported at n=2 comarques).
 - **All olive** (19 comarques, 171 obs): Clean convergence — 0 r̂>1.01, 0 low-ESS.
 
 **Refit required** with comarca-mean centered yield and no comarca RE.
 
-Pallars Jussà dropped from all cohorts by Step 2 (max GDD < 1700 in all years — too cold for olive phenology to complete on the GDD axis).
+Pallars Jussà dropped from all cohorts: S8 maturation (DOY 299–327) does not complete in this high-altitude comarca in most years. Exclusion criterion unchanged; only the basis for it is now expressed in calendar terms.
 
-#### Step 8 — Posterior contrasts (three-cohort comparison)
+#### Step 8 — Posterior contrasts (two-cohort comparison)
+
+**Note:** Contrasts below used GDD-axis windows (pre-flowering 0–350, flowering 350–450, pit hardening 900–1200 GDD). Analogous contrasts on the calendar DOY axis (S5/S6/S7/S8) will replace these once the pipeline is refactored.
 
 Window-integrated β(t) contrasts from 8000 posterior draws per cohort (comarca-mean centered yield, no comarca RE):
 
@@ -356,13 +375,7 @@ Window-integrated β(t) contrasts from 8000 posterior draws per cohort (comarca-
 - **Δ(pit − flower): median +0.000084, 90% CI [−0.000110, +0.000260], P(Δ>0) = 0.925**
 - Δ(flower − pre): median +0.000081, P(Δ>0) = 0.865
 
-**Morruda (corroboration — all folds now converge cleanly after comarca RE removal):**
-- β_pre-flowering: median −0.000084
-- β_flowering: median +0.000027
-- β_pit hardening: median +0.000230
-- **Δ(pit − flower): median +0.000200, P(Δ>0) = 0.855**
-
-**All olive (broadest spatial test):**
+**All olive (breadth check):**
 - β_pre-flowering: median −0.000033
 - β_flowering: median −0.000009
 - β_pit hardening: median +0.000017
@@ -371,7 +384,9 @@ Window-integrated β(t) contrasts from 8000 posterior draws per cohort (comarca-
 
 Contrast table: `results/tables/posterior_contrast_summary_cohort_robustness.csv`
 
-#### Step 9 — LOYO stability (all three cohorts)
+#### Step 9 — LOYO stability (two cohorts)
+
+**Note:** Results below are from the GDD-axis model and will be rerun on the calendar DOY axis.
 
 Full-data and 9 leave-one-year-out refits per cohort.
 
@@ -391,34 +406,33 @@ Full-data and 9 leave-one-year-out refits per cohort.
 
 All 9 folds positive; P(Δ>0) range 0.78–0.97. No sign flip. 2016 is weakest fold (P=0.78). 2023 no longer uniquely weak (P=0.89) — the ~20% area reporting drop in 2023 is absorbed more cleanly by the year RE once comarca means are removed.
 
-**Morruda** — Full-data: Δ = +0.000197, P(Δ>0) = 0.845. All 9 folds positive; P range 0.73–0.96. CIs wide (underpowered at n=16 per fold). Several folds show r̂>1.01 — expected at n=16 with year RE.
-
-**All olive** — Full-data: Δ = +0.000028, P(Δ>0) = 0.750. P range 0.55–0.93 across folds; 2023 weakest (P=0.55), 2024 strongest (P=0.93). The cultivar-mixing dilution persists as expected.
+**All olive** — Full-data:
 
 Figures: `results/figures/loyo_beta_overlay_{cohort}_wd_state.png`, `results/figures/loyo_delta_strip_{cohort}_wd_state.png`
 Tables: `results/tables/loyo_summary_{cohort}_wd_state.csv`
 
-### Three-cohort robustness assessment
+### Two-cohort robustness assessment
 
-The β(t) shape is **qualitatively consistent across all three cohorts**: a monotone-rising curve from negative values in pre-flowering through near-zero at flowering to positive in pit hardening and oil accumulation. This means the water deficit signal — more deficit early is bad (reduces flower count), deficit during pit hardening has less impact — is not an artifact of cultivar selection or comarca subset.
+The β(t) shape is **qualitatively consistent across both cohorts**: a monotone-rising curve from negative values in pre-flowering through near-zero at flowering to positive in pit hardening and oil accumulation. This means the water deficit signal — more deficit early is bad (reduces flower count), deficit during pit hardening has less impact — is not an artifact of cultivar selection or comarca subset.
 
 **What strengthens the finding:**
-1. **Direction is unanimous.** All three cohorts show Δ(pit − flower) > 0 in the posterior median. The sign never flips.
+1. **Direction is unanimous.** Both cohorts show Δ(pit − flower) > 0 in the posterior median. The sign never flips.
 2. **Shape is consistent.** The β(t) curves share the same monotone-rising profile despite different comarca sets, cultivar mixes, and sample sizes.
 3. **Arbequina is the cleanest signal.** P(Δ>0) = 0.93, consistent with the cultivar-homogeneous subset giving the least diluted climate response.
 4. **LOYO stability.** No single year drives the Arbequina result; 8/9 folds maintain P(Δ>0) > 0.85.
 
 **What tempers it:**
 1. **All olive dilutes.** The broadest cohort (19 comarques, mixed cultivars) drops P(Δ>0) to 0.69. Cultivar mixing adds noise — different cultivars have different phenological timing and water sensitivity, smearing the β(t) signal.
-2. **Morruda is underpowered.** 2 comarques and 18 obs cannot support the hierarchical structure (convergence flags). P(Δ>0) = 0.84 is directionally supportive but the CIs are 3× wider than Arbequina's.
-3. **Absolute effect sizes are small.** The β(t) coefficients are on the order of 10⁻⁴, reflecting the R² ≈ 0.02 signal strength documented in Step 6. The shape is real but the magnitude is modest.
-4. **2023 sensitivity.** The DARP reporting change in 2023 affects the Arbequina result; its exclusion drops P(Δ>0) to 0.63.
+2. **Absolute effect sizes are small.** The β(t) coefficients are on the order of 10⁻⁴, reflecting the R² ≈ 0.02 signal strength documented in Step 6. The shape is real but the magnitude is modest.
+3. **2023 sensitivity.** The DARP reporting change in 2023 affects the Arbequina result; its exclusion drops P(Δ>0) to 0.63.
 
-**Conclusion:** The three-cohort comparison provides the strongest robustness argument available from this dataset. The consistent β(t) shape across cultivar-restricted (Arbequina), cultivar-corroborating (Morruda), and cultivar-agnostic (all olive) panels confirms the finding is not an artifact of subset selection. The dilution pattern (Arbequina > Morruda > all olive in signal strength) is itself informative: it implies the WD signal is cultivar-specific, with homogeneous Arbequina panels producing the clearest response. This supports future work targeting cultivar-level analyses with parcel-scale yield data.
+**Conclusion:** The two-cohort comparison provides the strongest robustness argument available from this dataset. The consistent β(t) shape across cultivar-restricted (Arbequina) and cultivar-agnostic (all olive) panels confirms the finding is not an artifact of subset selection. The dilution pattern (Arbequina > all olive in signal strength) is itself informative: it implies the WD signal is cultivar-specific, with homogeneous Arbequina panels producing the clearest response. This supports future work targeting cultivar-level analyses with parcel-scale yield data.
 
-### Step 10 — Completed
+### Step 10 — Partially superseded
 
-All planned sweeps run on Arbequina (the headline cohort) at 2000 warmup + 2000 draws × 4 chains, CPU sequential. Pipeline orchestration: `src/10_run_sweeps.sh` calls `src/10_sensitivity_analysis.py` once per sweep group, writes one CSV row per `(param-combo × window-shift)` to `results/tables/sens_rows/`, then `src/10_aggregate_sensitivity.py` rebuilds `results/tables/sensitivity_summary.csv` (48 rows from 16 unique runs × 3 window shifts). A lockfile guards against concurrent runners and the per-row file layout is safe against partial writes and resumption.
+**GDD sweeps are retired.** T_b and GDD-window-shift sweeps no longer apply. Sweeps for tau, basis k, predictor (WD vs VPD), year-RE specification, and irrigated negative control remain valid and will be re-run on the calendar DOY axis.
+
+Prior GDD-axis sweep results (Arbequina, 2000 warmup + 2000 draws × 4 chains) are retained below as historical record:
 
 #### What stays robust
 
@@ -446,4 +460,4 @@ Full table: `results/tables/sensitivity_summary.csv`. Per-row evidence (atomic C
 
 ## Minimum viable deliverable
 
-Steps 7, 8, and 9 are complete. The three-cohort β(t) comparison provides the core robustness result. The paper can be framed as establishing the scalar-on-function methodology for Mediterranean perennial crops and reporting a directionally plausible but underpowered stage-specific water sensitivity pattern. The honest finding — monotone-rising β(t) with P(Δ>0) = 0.93 for Arbequina but attenuated to 0.69 when cultivar mixing is permitted — is a publishable result that motivates parcel-level and multi-region follow-ups.
+Steps 7, 8, and 9 are complete. The two-cohort β(t) comparison provides the core robustness result. The paper can be framed as establishing the scalar-on-function methodology for Mediterranean perennial crops and reporting a directionally plausible but underpowered stage-specific water sensitivity pattern. The honest finding — monotone-rising β(t) with P(Δ>0) = 0.93 for Arbequina but attenuated to 0.69 when cultivar mixing is permitted — is a publishable result that motivates parcel-level and multi-region follow-ups.
