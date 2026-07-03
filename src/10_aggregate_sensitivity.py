@@ -8,7 +8,7 @@ applies baseline-comparison flags, and writes the aggregated summary.
 
 This is the ONLY script that writes results/tables/sensitivity_summary.csv,
 so it must NOT be run concurrently with itself.  It is fast (<1s) and
-intended to run once at the end of 10_run_sweeps.sh.
+intended to run once after a batch of 10_sensitivity_analysis.py invocations.
 """
 import logging
 import sys
@@ -24,9 +24,18 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
 
 KEY_COLS = [
-    "cohort", "predictor", "base_temp", "tau_gdd",
-    "basis_k", "year_re_mode", "window_shift_gdd",
+    "cohort", "predictor", "tau_days",
+    "basis_k", "year_re_mode", "window_shift_days",
 ]
+# Baseline row used as reference for sign-flip and p_diff flags
+BASELINE = {
+    "predictor": "wd_state",
+    "tau_days": 45.0,
+    "basis_k": 5,
+    "year_re_mode": "with_year",
+    "window_shift_days": 0,
+}
+HEADLINE_CONTRAST = "delta_S7_S6"  # median column used for sign-flip check
 
 
 def main():
@@ -55,26 +64,24 @@ def main():
         log.info(f"Deduplicated {n_raw} → {len(df)} rows on {KEY_COLS}")
 
     # Per-cohort baseline-comparison flags
+    headline_col = f"{HEADLINE_CONTRAST}_median"
+    pdiff_col    = f"{HEADLINE_CONTRAST}_p_diff"
     flagged = []
     for cohort in df["cohort"].unique():
-        baseline = df[
-            (df["cohort"] == cohort)
-            & (df["predictor"] == "wd_state")
-            & (df["base_temp"] == 10.0)
-            & (df["tau_gdd"] == 45.0)
-            & (df["basis_k"] == 5)
-            & (df["year_re_mode"] == "with_year")
-            & (df["window_shift_gdd"] == 0)
-        ]
+        mask = pd.Series([True] * len(df))
+        for col, val in BASELINE.items():
+            if col in df.columns:
+                mask &= (df[col] == val)
+        mask &= (df["cohort"] == cohort)
+        baseline = df[mask]
         d = df[df["cohort"] == cohort].copy()
-        if baseline.empty:
-            d["delta_sign_flip_vs_baseline"] = False
+        if baseline.empty or headline_col not in df.columns:
+            d["headline_sign_flip"] = False
+            d["headline_p_diff_lt_0p7"] = False
         else:
-            b = baseline.iloc[0]
-            d["delta_sign_flip_vs_baseline"] = (
-                np.sign(d["delta_median"]) != np.sign(b["delta_median"])
-            )
-        d["prob_lt_0p7"] = d["prob_delta_gt_0"] < 0.7
+            b_median = baseline.iloc[0][headline_col]
+            d["headline_sign_flip"]     = np.sign(d[headline_col]) != np.sign(b_median)
+            d["headline_p_diff_lt_0p7"] = d[pdiff_col] < 0.7 if pdiff_col in d.columns else False
         flagged.append(d)
     df = pd.concat(flagged, ignore_index=True)
 
@@ -83,11 +90,11 @@ def main():
     log.info(f"Wrote {len(df)} rows → {out_csv}")
 
     # Brief stability report
-    flips = df["delta_sign_flip_vs_baseline"].sum()
-    weak = df["prob_lt_0p7"].sum()
+    flips = int(df["headline_sign_flip"].sum()) if "headline_sign_flip" in df.columns else 0
+    weak  = int(df["headline_p_diff_lt_0p7"].sum()) if "headline_p_diff_lt_0p7" in df.columns else 0
     log.info(
-        f"Stability: sign-flip rows = {flips}, P(Δ>0)<0.7 rows = {weak} "
-        f"(out of {len(df)})"
+        f"Stability ({HEADLINE_CONTRAST}): sign-flip rows = {flips}, "
+        f"P(diff)<0.7 rows = {weak} (out of {len(df)})"
     )
 
 

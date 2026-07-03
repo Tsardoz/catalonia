@@ -42,18 +42,20 @@ catalonia/
     extract_climate.py                # Step 3b — spatial aggregation from .nc per comarca polygon
     aggregate_seasonal.py             # Step 4 — seasonal weather aggregation
     join_dataset.py                   # Step 5 — join yield + climate
-    01_load_data.py                   # Olive pipeline — cohort-filtered yield + climate
-    02_compute_gdd.py                 # Olive pipeline — GDD axis interpolation
-    03_compute_water_deficit.py       # Olive pipeline — WD/VPD predictor matrices
-    04_align_phenology.py             # Olive pipeline — phenological anchors
-    05_build_basis.py                 # Olive pipeline — B-spline basis + reduced predictors
+    01_load_data.py                   # Olive pipeline — cohort yield + climate (--min-rainfed-ha filter)
+    02_prepare_doy_axis.py            # Olive pipeline — calendar-window axis prep
+    03_compute_water_deficit.py       # Olive pipeline — WD/VPD predictor matrices on DOY axis
+    04_align_phenology.py             # Olive pipeline — calendar DOY phenological anchors
+    05_build_basis.py                 # Olive pipeline — B-spline basis + reduced predictors on DOY grid
     06_fit_bambi_sanity.py            # Olive pipeline — Bambi hierarchical sanity check
-    07_fit_numpyro_main.py            # Olive pipeline — NumPyro scalar-on-function model
-    08_posterior_contrast.py          # Olive pipeline — stage-window β contrasts
+    07_fit_numpyro_main.py            # Olive pipeline — NumPyro scalar-on-function model (--cohort, CPU-only)
+    08_posterior_contrast.py          # Olive pipeline — S7-referenced stage contrasts + P(diff) metric
     09_stability_loyo.py              # Olive pipeline — leave-one-year-out stability
     10_sensitivity_analysis.py        # Olive pipeline — sensitivity sweeps, per-row CSVs
     10_aggregate_sensitivity.py       # Olive pipeline — rebuild sensitivity_summary.csv
-    10_run_sweeps.sh                  # Olive pipeline — sweep orchestration (lockfile, CPU)
+    tau_sensitivity_sweep.py          # Olive pipeline — tau (memory timescale) sensitivity sweep for S_pre
+    plot_beta_t_comparison.py         # Olive pipeline — β(t) posterior curves across cohorts (calendar axis)
+    plot_stage_posteriors.py          # Olive pipeline — per-stage β KDE + S7-referenced contrasts
     utils/config.py                   # Shared config for olive pipeline
     utils/splines.py                  # B-spline basis construction
   figures/
@@ -394,24 +396,56 @@ rainfed-Arbequina yield analysis.
 See `olive_water_sensitivity_plan.md` for the current olive analysis methodology
 (hierarchical Bayesian scalar-on-function regression). Prior sliding-window OLS analyses
 are archived under `archive/rolling_window/`.
+
 ## Olive pipeline status (May 2026)
-Steps 1–10 are implemented and run. Headline contrast for Arbequina is
-**Δ(pit − flower) = +0.108 × 10⁻³, P(Δ>0) = 0.92** (n = 90 comarca-years).
-- Step 9 LOYO: all 9 folds positive, P ∈ [0.78, 0.97], no sign flip.
-- Step 10 sensitivity sweep (16 unique runs × 3 window shifts → 48 rows in
-  `results/tables/sensitivity_summary.csv`): direction robust to tau, basis k,
-  T_b ≥ 8.5 °C, and ±50 GDD window shifts; flips under VPD predictor
-  (anti-correlated by construction) and under cold-T_b reparameterizations
-  with alternate anchors; attenuates as expected under the irrigated
-  negative control (P 0.92 → 0.64, magnitude −63 %).
-Reproducibility: `bash src/10_run_sweeps.sh` orchestrates the full sweep.
-A lockfile (`results/.sens_run.lock`) prevents concurrent runners from
-clobbering shared preprocessing files. Each (param-combo × window-shift)
-result is written atomically to `results/tables/sens_rows/`; the aggregated
-summary is rebuilt by `src/10_aggregate_sensitivity.py`. MCMC fits resume
-automatically via `--reuse-existing` (skips if the `beta_t_draws.npy`
-artifact exists). JAX is pinned to CPU (`JAX_PLATFORM_NAME=cpu`) because
-GPU is ~10× slower for this small-n model.
+The olive scalar-on-function pipeline uses fixed calendar windows anchored to
+observed Arbequina phenology in Garrido et al. 2021 (*Forests* 12:204).
+The GDD axis is retired; all GDD-axis artifacts have been deleted.
+
+**Current methodology**
+- **Two cohorts:** Arbequina headline panel (10 comarques, 90 comarca-years
+  after lag) and all-olive breadth check (18 comarques ≥ 500 ha mean rainfed
+  area, 162 comarca-years). The all-olive panel is defined by
+  `--min-rainfed-ha 500` in `01_load_data.py` (default); the old
+  DUN rainfed-dominance whitelist is superseded.
+- **Fixed calendar stages** (S_pre + S5–S8): S_pre DOY 1–71, S5 DOY 72–138,
+  S6 DOY 139–173, S7 DOY 174–299, S8 DOY 300–327.
+- **Headline predictor:** `CWB_state` (leaky integrator, τ = 45 days) on the
+  calendar DOY axis.
+- **Contrast convention:** All stage contrasts use S7 (fruit development) as
+  the reference. The primary metric is **P(diff) = max(P(Δ>0), P(Δ<0))**,
+  which answers "how likely are these two stages different?" (0.5 = same,
+  1.0 = certainly different). The directional `prob_gt_0` is also retained.
+- Within-estimator centering of `yield_tha` and `lag_yield`; no comarca RE.
+
+**Implementation status — complete on calendar axis**
+- Steps 1–10 implemented and run on the calendar DOY axis.
+  Step 10 complete for Arbequina CWB-state (τ × k × year-RE sweep, +irrigated control).
+  VPD and all_olive sweeps remain.
+- GDD-axis artifacts deleted from `results/`. Morruda archived under `results/archive/morruda/`.
+- `02_prepare_doy_axis.py` reads `agera5_daily_catalonia.csv` directly;
+  `daily_climate.csv` is no longer written by Step 1 (coverage validation only).
+- Irrigated pipeline: run Steps 1–8 with `--irrigated` and `--stem-suffix irrigated`;
+  restore rainfed with Steps 1–5. Step 9 not needed for irrigated (negative control only).
+
+**Calendar-axis headline results (8000 draws, 4 chains × 2000)**
+
+| Cohort | n | S7 vs S6 P(diff) | S7 vs S5 P(diff) | S7 vs S_pre P(diff) |
+|---|---|---|---|---|
+| Arbequina | 90 obs | 0.80 | 0.89 | 0.95 |
+| All olive (≥500 ha) | 162 obs | 0.84 | 0.93 | 0.99 |
+
+All contrasts show S7 β ≤ S_pre/S5/S6 β in the posterior median.
+S7 vs S8 is weakest (P(diff) 0.70–0.77). **LOYO: 1 sign reversal per cohort**
+in the S7−S6 contrast (fold P(diff) 0.55–0.95 Arbequina, 0.72–0.94 all-olive);
+the monotone β(t) shape (S_pre positive, S7 near zero) was preserved across all folds.
+
+**Step 10 sensitivity (Arbequina, WD-state, τ × k × year-RE sweep)**
+- With year-RE: P(diff) for S7−S6 ranges 0.66–0.91, no sign flips.
+- Without year-RE: 11/40 parameter combinations flip sign (short τ, high k).
+- Longer τ monotonically strengthens the contrast.
+- ±10 day DOY window shift: P(diff) changes 0.83 → 0.80 → 0.78 (stable).
+- Irrigated negative control: P(diff) = 0.65 vs 0.80 rainfed; β(t) shape similar.
 
 ---
 
@@ -449,8 +483,8 @@ GPU is ~10× slower for this small-n model.
 | `data/agera5_daily_catalonia_oliveweighted_elevcor.csv` | + residual lapse-rate `*_elevcor` columns on top of olive-weighted file |
 | `data/comarca_olive_elevation_correction.csv` | Per-comarca lapse offset (unweighted z_climate) |
 | `data/comarca_olive_elevation_correction_oliveweighted.csv` | Per-comarca residual lapse offset (olive-area-weighted z_climate) |
-| `data/dun/comarca_olive_whitelist.csv` | 18 comarques where olive is ≥80% of rainfed area (mixed-cultivar robustness panel) |
 | `data/dun/comarca_arbequina_whitelist.csv` | 10 comarques where Arbequina is ≥90% of rainfed olive area AND ≥500 ha (headline cultivar subset) |
+| `data/dun/comarca_all_olive_whitelist.csv` | Legacy 20-comarca dominance whitelist — superseded by `--min-rainfed-ha 500` in `01_load_data.py` |
 | `data/agera5_seasonal_catalonia.csv` | Seasonal aggregates per comarca × crop × year |
 | `data/catalan_woody_yield_climate.csv` | Final joined dataset |
 | `data/olive_groves_catalonia.gpkg` | Olive farm polygons with elevation, grid matching, corrected temperatures |
