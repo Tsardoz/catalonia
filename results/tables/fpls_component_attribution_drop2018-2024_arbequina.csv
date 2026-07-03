@@ -1,0 +1,7 @@
+n_components,component_index,s8_integrated_contribution,is_top_s8_contributor,storm_years_extreme,storm_year_detail,note
+1,0,-0.04070396345038778,True,True,2018: mean|z|=1.68 max|z|=2.43 best_rank=1/90; 2024: mean|z|=0.84 max|z|=1.44 best_rank=15/90,storm_years_extreme=True on the top S8 contributor supports the storm-artifact reading; False supports the real-signal reading
+2,0,-0.04070396345038778,False,True,2018: mean|z|=1.68 max|z|=2.43 best_rank=1/90; 2024: mean|z|=0.84 max|z|=1.44 best_rank=15/90,
+2,1,0.07863038718567011,True,False,2018: mean|z|=0.76 max|z|=1.68 best_rank=11/90; 2024: mean|z|=0.50 max|z|=0.88 best_rank=24/90,storm_years_extreme=True on the top S8 contributor supports the storm-artifact reading; False supports the real-signal reading
+3,0,-0.040703963450387765,False,True,2018: mean|z|=1.68 max|z|=2.43 best_rank=1/90; 2024: mean|z|=0.84 max|z|=1.44 best_rank=15/90,
+3,1,0.07863038718567014,True,False,2018: mean|z|=0.76 max|z|=1.68 best_rank=11/90; 2024: mean|z|=0.50 max|z|=0.88 best_rank=24/90,storm_years_extreme=True on the top S8 contributor supports the storm-artifact reading; False supports the real-signal reading
+3,2,0.05153880190641396,False,False,2018: mean|z|=0.38 max|z|=0.92 best_rank=39/90; 2024: mean|z|=0.52 max|z|=1.03 best_rank=34/90,

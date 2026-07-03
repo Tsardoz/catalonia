@@ -80,10 +80,30 @@ def parse_args() -> argparse.Namespace:
         help="Disable year random effect (sensitivity spec).",
     )
     parser.add_argument(
+        "--no-lag-yield",
+        action="store_true",
+        help=(
+            "Disable the lag_yield term, leaving a pure functional-effect "
+            "(water-balance-only) model: mu = alpha + functional_effect "
+            "[+ year_re]. Used to build an apples-to-apples baseline against "
+            "single-predictor estimators (e.g. fPLS) that have no lag term."
+        ),
+    )
+    parser.add_argument(
         "--exclude-year",
         type=int,
         default=None,
         help="Exclude a single year from fitting (used by LOYO).",
+    )
+    parser.add_argument(
+        "--exclude-years",
+        type=str,
+        default="",
+        help=(
+            "Comma-separated list of years to exclude from fitting (used for "
+            "multi-year drop experiments, e.g. storm-year removal). Combined "
+            "with --exclude-year if both are given."
+        ),
     )
     parser.add_argument(
         "--stem-suffix",
@@ -92,6 +112,17 @@ def parse_args() -> argparse.Namespace:
         help="Optional suffix appended to output stem (e.g., loyo_y2019).",
     )
     return parser.parse_args()
+
+
+def resolve_excluded_years(args: argparse.Namespace) -> list[int]:
+    """Union of --exclude-year (single, used by LOYO) and --exclude-years
+    (comma-separated, used by multi-year drop experiments) as a sorted list."""
+    excluded = set()
+    if args.exclude_year is not None:
+        excluded.add(int(args.exclude_year))
+    if args.exclude_years:
+        excluded.update(int(y) for y in args.exclude_years.split(",") if y.strip())
+    return sorted(excluded)
 
 
 def resolve_fit_cohorts(requested: str, obs_df: pd.DataFrame) -> list[str]:
@@ -207,7 +238,7 @@ def build_design_arrays(
     return fit_df, arrays
 
 
-def make_model(numpyro, jnp, lax, dist, include_year_re: bool):
+def make_model(numpyro, jnp, lax, dist, include_year_re: bool, include_lag_yield: bool = True):
     def model(
         Xz, lag_yield, year_idx,
         n_years, y=None,
@@ -245,10 +276,12 @@ def make_model(numpyro, jnp, lax, dist, include_year_re: bool):
             numpyro.deterministic("year_re", year_re)
 
         alpha = numpyro.sample("alpha", dist.Normal(0.0, 0.5))
-        lag_coef = numpyro.sample("lag_coef", dist.Normal(0.0, 0.5))
         sigma = numpyro.sample("sigma", dist.HalfNormal(1.0))
 
-        mu = alpha + functional_effect + lag_coef * lag_yield
+        mu = alpha + functional_effect
+        if include_lag_yield:
+            lag_coef = numpyro.sample("lag_coef", dist.Normal(0.0, 0.5))
+            mu = mu + lag_coef * lag_yield
         if include_year_re:
             mu = mu + year_re[year_idx]
 
@@ -273,8 +306,10 @@ def fit_one(
     NUTS,
 ):
     include_year_re = not args.no_year_re
+    include_lag_yield = not args.no_lag_yield
     model = make_model(
-        numpyro=numpyro, jnp=jnp, lax=lax, dist=dist, include_year_re=include_year_re
+        numpyro=numpyro, jnp=jnp, lax=lax, dist=dist,
+        include_year_re=include_year_re, include_lag_yield=include_lag_yield,
     )
     kernel = NUTS(model, target_accept_prob=args.target_accept)
     mcmc = MCMC(
@@ -311,11 +346,16 @@ def fit_one(
     bad_rhat = int((summary["r_hat"] > 1.01).sum()) if "r_hat" in summary.columns else 0
     low_ess = int((summary["ess_bulk"] < 400).sum()) if "ess_bulk" in summary.columns else 0
 
+    excluded_years = resolve_excluded_years(args)
     stem = f"numpyro_main_{cohort_name}_{args.predictor}"
     if not include_year_re:
         stem += "_noyearre"
-    if args.exclude_year is not None:
-        stem += f"_excl{int(args.exclude_year)}"
+    if not include_lag_yield:
+        stem += "_nolagyield"
+    if len(excluded_years) == 1:
+        stem += f"_excl{excluded_years[0]}"  # unchanged naming for the single-year LOYO case
+    elif len(excluded_years) > 1:
+        stem += "_excl" + "-".join(str(y) for y in excluded_years)
     if args.stem_suffix:
         stem += f"_{args.stem_suffix}"
 
@@ -340,14 +380,17 @@ def fit_one(
     np.save(beta_phys_path, beta_phys)
     np.save(beta_t_path, beta_t)
 
+    formula = f"yield_tha_centered ~ f({args.predictor}_reduced_standardized)"
+    if include_lag_yield:
+        formula += " + lag_yield_centered"
+    if include_year_re:
+        formula += " + (1|year)"
     meta = {
         "cohort": cohort_name,
         "predictor": args.predictor,
         "include_year_re": include_year_re,
-        "formula": (
-            f"yield_tha_centered ~ f({args.predictor}_reduced_standardized) + "
-            "lag_yield_centered [+ (1|year)]"
-        ),
+        "include_lag_yield": include_lag_yield,
+        "formula": formula,
         "n_obs": int(len(fit_df)),
         "n_comarcas": int(len(arrays["comarca_levels"])),
         "n_years": int(arrays["n_years"]),
@@ -359,6 +402,7 @@ def fit_one(
         "target_accept": args.target_accept,
         "sd_eps": args.sd_eps,
         "exclude_year": args.exclude_year,
+        "excluded_years": excluded_years if excluded_years else None,
         "stem_suffix": args.stem_suffix,
         "bad_rhat_count_gt_1.01": bad_rhat,
         "low_ess_bulk_count_lt_400": low_ess,
@@ -390,6 +434,7 @@ def fit_one(
         "cohort": cohort_name,
         "predictor": args.predictor,
         "include_year_re": include_year_re,
+        "include_lag_yield": include_lag_yield,
         "n_obs": int(len(fit_df)),
         "n_comarcas": int(len(arrays["comarca_levels"])),
         "n_years": int(arrays["n_years"]),
@@ -409,6 +454,7 @@ def main():
 
     obs_df, X_reduced, B = load_inputs(args.predictor)
     fit_cohorts = resolve_fit_cohorts(args.cohort, obs_df)
+    excluded_years = resolve_excluded_years(args)
     final_rows = []
 
     for cohort_name in fit_cohorts:
@@ -417,24 +463,25 @@ def main():
             raise ValueError(
                 f"No rows available for cohort='{cohort_name}'. Run Step 1 first."
             )
-        if args.exclude_year is not None:
+        if excluded_years:
             n_before = len(fit_df)
-            fit_df = fit_df[fit_df["year"].astype(int) != int(args.exclude_year)].copy()
+            fit_df = fit_df[~fit_df["year"].astype(int).isin(excluded_years)].copy()
             n_dropped = n_before - len(fit_df)
             log.info(
-                f"Excluded year {int(args.exclude_year)} for cohort={cohort_name}; "
+                f"Excluded years {excluded_years} for cohort={cohort_name}; "
                 f"dropped {n_dropped} rows"
             )
             if fit_df.empty:
                 raise ValueError(
-                    f"No rows left after excluding year {args.exclude_year} "
+                    f"No rows left after excluding years {excluded_years} "
                     f"for cohort='{cohort_name}'."
                 )
 
         fit_df, arrays = build_design_arrays(fit_df=fit_df, X_reduced=X_reduced, sd_eps=args.sd_eps)
         log.info(
             f"Fitting cohort={cohort_name}: n_obs={len(fit_df)}, n_basis={arrays['Xz'].shape[1]}, "
-            f"year_re={'off' if args.no_year_re else 'on'}, chain_method={args.chain_method}"
+            f"year_re={'off' if args.no_year_re else 'on'}, "
+            f"lag_yield={'off' if args.no_lag_yield else 'on'}, chain_method={args.chain_method}"
         )
         row = fit_one(
             args=args,
@@ -456,7 +503,7 @@ def main():
     final_report = pd.DataFrame(final_rows).sort_values(["cohort", "predictor"]).reset_index(drop=True)
     # Only write the aggregate report for main (non-fold, non-sensitivity) runs;
     # fold/sensitivity runs already write their own per-stem _meta.json.
-    if args.exclude_year is None and not args.stem_suffix:
+    if not excluded_years and not args.stem_suffix:
         final_report_path = TABLES / "final_numpyro_model_report.csv"
         final_report.to_csv(final_report_path, index=False)
         log.info(f"Saved final NumPyro model report: {final_report_path}")

@@ -1,0 +1,3 @@
+cohort,model,complexity,pooled_loyo_rmse,pooled_loyo_r2,n_obs,n_folds,note
+all_olive,fpls,k=1,0.4445327434184817,-0.15035208167054215,162,9,"secondary, likely-underpowered diagnostic (~9 folds) — not the primary result"
+all_olive,bayesian_baseline,n_basis=5 (RW2),0.4584505076054836,-0.22351186993539351,162,9,"secondary, likely-underpowered diagnostic (~9 folds) — not the primary result"

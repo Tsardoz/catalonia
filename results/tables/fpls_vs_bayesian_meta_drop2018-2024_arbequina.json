@@ -1,0 +1,36 @@
+{
+  "cohort": "arbequina",
+  "tau_days": 45,
+  "dropped_years": [
+    2018,
+    2024
+  ],
+  "n_obs_full": 90,
+  "n_obs_dropyears": 70,
+  "n_years_full": 9,
+  "n_years_dropyears": 7,
+  "headline_n_components": 1,
+  "shape_components": [
+    1,
+    2,
+    3
+  ],
+  "bayesian_stem_dropyears": "numpyro_main_arbequina_wd_state_noyearre_nolagyield_excl2018-2024",
+  "scale_check": {
+    "predict_consistency_ok": true,
+    "predict_consistency_max_abs_diff": 2.220446049250313e-16,
+    "integral_abs_coef_fpls": 0.46974902780537664,
+    "integral_abs_beta_bayesian_median": 0.3324471573561697,
+    "magnitude_ratio": 1.4130035929352454,
+    "scale_suspect": false
+  },
+  "caveat": "Dropping years further reduces an already-small n (9 -> 7 years), so this is a qualitative sign-recovery test, not a precision estimate.",
+  "decision_rule": "Bayesian autumn (S8) recovering positive and fPLS k=1 turning positive once storms are out indicates storm contamination and a real autumn window. Autumn positive surviving only in k=2 or k=3, with the storm years extreme on the top S8-contributing component (see fpls_component_attribution), indicates storm-fitting rather than a real signal. With fewer years remaining after the drop, fPLS k=3 is barely identified, so weight the k=1 and Bayesian sign-recovery over the k=3 behavior; anything that only moves at k=3 stays ambiguous.",
+  "outputs": {
+    "component_attribution_csv": "/home/tsardoz/phd/catalonia/results/tables/fpls_component_attribution_drop2018-2024_arbequina.csv",
+    "fpca_storm_diagnostic_csv": "/home/tsardoz/phd/catalonia/results/tables/fpls_fpca_storm_diagnostic_drop2018-2024_arbequina.csv",
+    "fpca_eigenfunctions_png": "/home/tsardoz/phd/catalonia/results/figures/fpls_fpca_eigenfunctions_drop2018-2024_arbequina.png",
+    "stage_means_compare_csv": "/home/tsardoz/phd/catalonia/results/tables/fpls_vs_bayesian_stage_means_drop2018-2024_arbequina.csv",
+    "beta_t_overlay_png": "/home/tsardoz/phd/catalonia/results/figures/fpls_vs_bayesian_beta_t_drop2018-2024_arbequina.png"
+  }
+}

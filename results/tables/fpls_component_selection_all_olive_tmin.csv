@@ -1,0 +1,6 @@
+cohort,n_components,pooled_loyo_rmse,pooled_loyo_r2,n_obs,n_folds,note
+all_olive,1,0.4445327434184817,-0.15035208167054215,162,9,selection-optimistic / exploratory — not used to pick the headline model
+all_olive,2,0.44633523242050904,-0.15969987801932506,162,9,selection-optimistic / exploratory — not used to pick the headline model
+all_olive,3,0.4455527663457952,-0.1556373243791871,162,9,selection-optimistic / exploratory — not used to pick the headline model
+all_olive,4,0.4468618522350571,-0.16243809439800283,162,9,selection-optimistic / exploratory — not used to pick the headline model
+all_olive,5,0.4900215273679107,-0.3978275328352474,162,9,selection-optimistic / exploratory — not used to pick the headline model
