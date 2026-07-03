@@ -6,6 +6,8 @@ For each held-out year:
   1) Refit Step 7 excluding that year
   2) Recompute beta(t) and Δ contrast summaries
   3) Compare fold medians to full-data posterior
+
+Operates on the calendar DOY-axis pipeline (S_pre/S5/S6/S7/S8 windows).
 """
 import argparse
 import logging
@@ -20,8 +22,7 @@ import pandas as pd
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent))
 from utils.config import (
-    PROCESSED, TABLES, FIGURES,
-    PRE_FLOWERING_GDD, FLOWERING_GDD, PIT_HARDENING_GDD,
+    PROCESSED, TABLES, FIGURES, STAGES_RESOLVED,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -34,18 +35,29 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--cohort",
-        choices=["arbequina", "morruda", "all_olive", "all"],
+        choices=["arbequina", "all_olive"],
         default="arbequina",
     )
     parser.add_argument("--predictor", default="wd_state")
     parser.add_argument("--draws", type=int, default=2000)
     parser.add_argument("--tune", type=int, default=2000)
     parser.add_argument("--chains", type=int, default=4)
+    parser.add_argument(
+        "--chain-method",
+        choices=["sequential", "parallel", "vectorized"],
+        default="sequential",
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--target-accept", type=float, default=0.95)
     parser.add_argument("--hdi-prob", type=float, default=0.90)
     parser.add_argument("--window-shift", type=int, default=0)
     parser.add_argument("--no-year-re", action="store_true")
+    parser.add_argument(
+        "--run-tag",
+        type=str,
+        default="",
+        help="Tag appended to all stem names (e.g. 'irrigated'). Prevents clobbering.",
+    )
     parser.add_argument(
         "--max-folds",
         type=int,
@@ -91,6 +103,7 @@ def _build_step7_cmd(args: argparse.Namespace, exclude_year: int | None, suffix:
         "--seed", str(args.seed),
         "--target-accept", str(args.target_accept),
     ]
+    cmd.extend(["--chain-method", args.chain_method])
     if args.no_year_re:
         cmd.append("--no-year-re")
     if exclude_year is not None:
@@ -144,37 +157,51 @@ def launch_step7(
     return stem, proc
 
 
-def window_masks(gdd_grid: np.ndarray, shift: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    pre = (PRE_FLOWERING_GDD[0] + shift, PRE_FLOWERING_GDD[1] + shift)
-    flo = (FLOWERING_GDD[0] + shift, FLOWERING_GDD[1] + shift)
-    pit = (PIT_HARDENING_GDD[0] + shift, PIT_HARDENING_GDD[1] + shift)
-    m_pre = (gdd_grid >= pre[0]) & (gdd_grid <= pre[1])
-    m_flo = (gdd_grid >= flo[0]) & (gdd_grid <= flo[1])
-    m_pit = (gdd_grid >= pit[0]) & (gdd_grid <= pit[1])
-    if not (np.any(m_pre) and np.any(m_flo) and np.any(m_pit)):
-        raise ValueError("At least one stage window has no grid points.")
-    return m_pre, m_flo, m_pit
+def window_masks(doy_grid: np.ndarray, shift: int) -> dict[str, np.ndarray]:
+    anchors = {name: (int(a) + shift, int(b) + shift) for name, (a, b) in STAGES_RESOLVED.items()}
+    masks = {}
+    for stage, (start, end) in anchors.items():
+        mask = (doy_grid >= start) & (doy_grid <= end)
+        if not np.any(mask):
+            raise ValueError(f"Stage '{stage}' window ({start}-{end} DOY) has no grid points after shift={shift}.")
+        masks[stage] = mask
+    return masks
 
 
 def summarize_stem(stem: str, shift: int, hdi_prob: float) -> dict:
     beta_t = np.load(f"/home/tsardoz/phd/catalonia/results/posteriors/{stem}_beta_t_draws.npy")
-    gdd_grid = np.load(PROCESSED / "gdd_grid.npy")
-    m_pre, m_flo, m_pit = window_masks(gdd_grid, shift)
-    beta_pre = beta_t[:, m_pre].mean(axis=1)
-    beta_flo = beta_t[:, m_flo].mean(axis=1)
-    beta_pit = beta_t[:, m_pit].mean(axis=1)
-    delta = beta_pit - beta_flo
+    doy_grid = np.load(PROCESSED / "doy_grid.npy")
+    if beta_t.shape[1] != doy_grid.size:
+        raise ValueError(
+            f"Axis mismatch for stem '{stem}': beta_t.shape[1]={beta_t.shape[1]} "
+            f"but doy_grid.size={doy_grid.size}. This file was produced on a "
+            "different (e.g. retired GDD) axis. Delete the stale artifact and rerun Step 7."
+        )
+    masks = window_masks(doy_grid, shift)
+
+    # Stage means
+    stage_means = {}
+    for stage, mask in masks.items():
+        stage_means[stage] = beta_t[:, mask].mean(axis=1)
+
+    # Calendar-axis contrasts (headline: S7 − S6)
+    delta_s7_s6 = stage_means["S7"] - stage_means["S6"]
+    delta_s6_s5 = stage_means["S6"] - stage_means["S5"]
+    delta_s5_spre = stage_means["S5"] - stage_means["S_pre"]
 
     lo = 0.5 * (1.0 - hdi_prob)
     hi = 1.0 - lo
     return {
         "stem": stem,
         "beta_t": beta_t,
-        "delta_draws": delta,
-        "delta_median": float(np.median(delta)),
-        "delta_q_lo": float(np.quantile(delta, lo)),
-        "delta_q_hi": float(np.quantile(delta, hi)),
-        "prob_delta_gt_0": float((delta > 0).mean()),
+        "delta_draws": delta_s7_s6,
+        "delta_median": float(np.median(delta_s7_s6)),
+        "delta_q_lo": float(np.quantile(delta_s7_s6, lo)),
+        "delta_q_hi": float(np.quantile(delta_s7_s6, hi)),
+        "prob_delta_gt_0": float((delta_s7_s6 > 0).mean()),
+        "stage_means": stage_means,
+        "delta_s6_s5": delta_s6_s5,
+        "delta_s5_spre": delta_s5_spre,
     }
 
 
@@ -183,23 +210,29 @@ def plot_beta_overlay(
     predictor: str,
     full_beta_t: np.ndarray,
     fold_beta_medians: dict[int, np.ndarray],
-    gdd_grid: np.ndarray,
+    doy_grid: np.ndarray,
+    tag: str = "",
 ):
     full_median = np.median(full_beta_t, axis=0)
     full_lo = np.quantile(full_beta_t, 0.05, axis=0)
     full_hi = np.quantile(full_beta_t, 0.95, axis=0)
 
     plt.figure(figsize=(9, 5))
-    plt.fill_between(gdd_grid, full_lo, full_hi, alpha=0.25, label="Full-data 90% band")
-    plt.plot(gdd_grid, full_median, lw=2.0, label="Full-data median")
+    plt.fill_between(doy_grid, full_lo, full_hi, alpha=0.25, label="Full-data 90% band")
+    plt.plot(doy_grid, full_median, lw=2.0, label="Full-data median")
     for year, med in sorted(fold_beta_medians.items()):
-        plt.plot(gdd_grid, med, lw=1.2, alpha=0.85, label=f"LOYO excl {year}")
+        plt.plot(doy_grid, med, lw=1.2, alpha=0.85, label=f"LOYO excl {year}")
     plt.axhline(0.0, color="gray", linestyle="--", linewidth=0.8)
-    plt.xlabel("GDD")
+    _PRED_DISP = {"wd_state": "CWB-state", "wd": "CWB", "wd30": "CWB-30d",
+                  "vpd": "VPD", "tmax": "Tmax", "tmin": "Tmin"}
+    plt.xlabel("DOY")
     plt.ylabel("β(t)")
-    plt.title(f"LOYO β(t) stability — {cohort} / {predictor}")
+    title = f"LOYO β(t) stability — {cohort} / {_PRED_DISP.get(predictor, predictor)}"
+    if tag:
+        title += f" [{tag}]"
+    plt.title(title)
     plt.legend(ncol=2, fontsize=8)
-    out = FIGURES / f"loyo_beta_overlay_{cohort}_{predictor}.png"
+    out = FIGURES / f"loyo_beta_overlay_{cohort}_{predictor}{('_' + tag) if tag else ''}.png"
     plt.tight_layout()
     plt.savefig(out, dpi=180)
     plt.close()
@@ -211,6 +244,7 @@ def plot_delta_strip(
     predictor: str,
     fold_medians: dict[int, float],
     full_delta_draws: np.ndarray,
+    tag: str = "",
 ):
     years = sorted(fold_medians.keys())
     vals = np.array([fold_medians[y] for y in years])
@@ -228,10 +262,15 @@ def plot_delta_strip(
     plt.axhspan(full_lo, full_hi, color="tab:red", alpha=0.15, label="Full-data Δ 90% CI")
     plt.axhline(0.0, color="gray", linestyle="--", linewidth=0.8)
     plt.xticks(x, years, rotation=45)
-    plt.ylabel("Δ (pit − flower)")
-    plt.title(f"LOYO Δ stability — {cohort} / {predictor}")
+    _PRED_DISP = {"wd_state": "CWB-state", "wd": "CWB", "wd30": "CWB-30d",
+                  "vpd": "VPD", "tmax": "Tmax", "tmin": "Tmin"}
+    plt.ylabel("Δ (S7 − S6)")
+    title = f"LOYO Δ stability — {cohort} / {_PRED_DISP.get(predictor, predictor)}"
+    if tag:
+        title += f" [{tag}]"
+    plt.title(title)
     plt.legend(fontsize=8)
-    out = FIGURES / f"loyo_delta_strip_{cohort}_{predictor}.png"
+    out = FIGURES / f"loyo_delta_strip_{cohort}_{predictor}{('_' + tag) if tag else ''}.png"
     plt.tight_layout()
     plt.savefig(out, dpi=180)
     plt.close()
@@ -246,8 +285,7 @@ def main():
     yield_df = pd.read_csv(PROCESSED / "olive_yield.csv")
     if "cohort" not in yield_df.columns:
         raise ValueError("olive_yield.csv missing cohort column; rerun Step 1.")
-    if args.cohort != "all":
-        yield_df = yield_df[yield_df["cohort"] == args.cohort].copy()
+    yield_df = yield_df[yield_df["cohort"] == args.cohort].copy()
     years = sorted(yield_df["year"].astype(int).unique().tolist())
     if args.max_folds > 0:
         years = years[:args.max_folds]
@@ -255,13 +293,14 @@ def main():
         raise ValueError("Need at least two years for LOYO.")
     log.info(f"LOYO years for cohort={args.cohort}: {years}")
 
-    full_stem = run_step7(args=args, exclude_year=None, suffix="full")
+    full_tag  = f"{args.run_tag}_full" if args.run_tag else "full"
+    full_stem = run_step7(args=args, exclude_year=None, suffix=full_tag)
     full = summarize_stem(stem=full_stem, shift=args.window_shift, hdi_prob=args.hdi_prob)
 
     # Launch all fold fits simultaneously
     fold_launches: list[tuple[int, str, "subprocess.Popen | None"]] = []
     for y in years:
-        fold_stem, proc = launch_step7(args=args, exclude_year=y)
+        fold_stem, proc = launch_step7(args=args, exclude_year=y, suffix=args.run_tag)
         fold_launches.append((int(y), fold_stem, proc))
 
     # Wait for all folds; collect failures
@@ -298,8 +337,9 @@ def main():
             "prob_delta_gt_0": fold["prob_delta_gt_0"],
         })
 
+    tag      = f"_{args.run_tag}" if args.run_tag else ""
     out_df = pd.DataFrame(rows).sort_values("held_out_year").reset_index(drop=True)
-    out_csv = TABLES / f"loyo_summary_{args.cohort}_{args.predictor}.csv"
+    out_csv = TABLES / f"loyo_summary_{args.cohort}_{args.predictor}{tag}.csv"
     out_df.to_csv(out_csv, index=False)
 
     full_row = pd.DataFrame([{
@@ -312,22 +352,24 @@ def main():
         "delta_q_hi": full["delta_q_hi"],
         "prob_delta_gt_0": full["prob_delta_gt_0"],
     }])
-    full_csv = TABLES / f"loyo_full_{args.cohort}_{args.predictor}.csv"
+    full_csv = TABLES / f"loyo_full_{args.cohort}_{args.predictor}{tag}.csv"
     full_row.to_csv(full_csv, index=False)
 
-    gdd_grid = np.load(PROCESSED / "gdd_grid.npy")
+    doy_grid = np.load(PROCESSED / "doy_grid.npy")
     fig1 = plot_beta_overlay(
         cohort=args.cohort,
         predictor=args.predictor,
         full_beta_t=full["beta_t"],
         fold_beta_medians=fold_beta_medians,
-        gdd_grid=gdd_grid,
+        doy_grid=doy_grid,
+        tag=args.run_tag,
     )
     fig2 = plot_delta_strip(
         cohort=args.cohort,
         predictor=args.predictor,
         fold_medians=fold_delta_medians,
         full_delta_draws=full["delta_draws"],
+        tag=args.run_tag,
     )
 
     log.info(f"Saved LOYO summary: {out_csv}")

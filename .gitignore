@@ -28,3 +28,16 @@ data/pdfs/
 
 # Archived large outputs from the old farm-level pipeline (>100 MB, exceeds GitHub limit)
 archive/data/weighted/agera5_daily_olive_farms.csv
+
+# Olive pipeline: regenerable MCMC artefacts (large, recreated by src/07_fit_numpyro_main.py
+# and src/10_sensitivity_analysis.py). Per-row CSVs and the aggregated summary remain tracked.
+results/posteriors/*.nc
+results/posteriors/*.npy
+
+# Olive pipeline: sensitivity sweep transient stdout (the structured log
+# results/sens_run.log remains tracked)
+results/sens_run.stdout.log
+results/.sens_run.lock
+
+# Processed olive pipeline intermediates (regenerable from scripts 01–05)
+data/processed/

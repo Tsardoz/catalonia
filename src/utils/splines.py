@@ -12,7 +12,7 @@ def build_bspline_basis(grid: np.ndarray, n_basis: int = 5,
 
     Parameters
     ----------
-    grid : 1-D array of evaluation points (e.g. GDD grid).
+    grid : 1-D array of evaluation points (e.g. calendar DOY grid).
     n_basis : number of basis functions.
     degree : spline degree (3 = cubic).
 

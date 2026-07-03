@@ -17,7 +17,6 @@ TABLES = RESULTS / "tables"
 # ── Raw data files ───────────────────────────────────────────────────────
 YIELD_CSV = DATA / "catalan_woody_yield_raw.csv"
 DAILY_CLIMATE_CSV = DATA / "agera5_daily_catalonia.csv"
-GDD_CSV = DATA / "agera5_gdd_catalonia.csv"
 WATER_BALANCE_CSV = DATA / "agera5_water_balance_catalonia.csv"
 ARBEQUINA_WHITELIST = DATA / "dun" / "comarca_arbequina_whitelist.csv"
 MORRUDA_WHITELIST = DATA / "dun" / "comarca_morruda_whitelist.csv"
@@ -31,32 +30,39 @@ COHORT_WHITELISTS = {
 }
 DEFAULT_COHORT = "arbequina"
 
-# ── GDD parameters ───────────────────────────────────────────────────────
-BASE_TEMP = 10.0               # °C, De Melo-Abreu et al. 2004
-GDD_UPPER = 1700               # common upper bound (fixed, not per-year)
-GDD_STEP = 25                  # GDD grid resolution
-GDD_GRID_MIN = 0
-WD_ROLLING_WINDOW_GDD = 30     # rolling cumulative WD comparison predictor
-WD_STATE_TAU_GDD = 45          # leaky-integrator timescale for WD state proxy
+# Two-cohort plan: arbequina headline + all_olive breadth check
+PLAN_COHORTS = ["arbequina", "all_olive"]
 
-# ── Phenological anchors (GDD at T_b = 10 °C) ───────────────────────────
-# Sources: Didevarasl et al. 2023; Sanz-Cortés et al. 2002 (BBCH 50-59)
-PRE_FLOWERING_GDD = (0, 350)        # bud break → inflorescence development
-FLOWERING_GDD = (350, 450)
-PIT_HARDENING_GDD = (900, 1200)
-OIL_ACCUMULATION_GDD = (1200, 1700)
+# ── Calendar DOY parameters (current methodology) ───────────────────────
+DOY_START = 1                  # pre-inflorescence start (Jan 1)
+DOY_END = 327                  # S8 end / harvest truncation (≈ 23 November)
+DOY_STEP = 1                   # daily grid
+WD_ROLLING_WINDOW_DAYS = 30    # rolling cumulative WD comparison predictor
+WD_STATE_TAU_DAYS = 45         # leaky-integrator timescale for WD state proxy
 
-# ── Alternate anchors for T_b = 6.5 °C sensitivity (Step 10) ─────────────
-# Cultivar-specific estimates for early cultivars (Arbequina-like) in
-# inland Catalonia, interpolated from Toledo/Galicia/Croatia bracket.
-# NOT used in headline analysis — kept here for the sensitivity sweep.
-# Start-date convention: Jan 1 (must be verified against data before use).
-ALT_BASE_TEMP = 6.5
-ALT_PRE_FLOWERING_GDD = (0, 250)     # bud break / BBCH 51
-ALT_FLOWERING_GDD = (400, 600)       # BBCH 61, mid-range Didevarasl/Selak
-ALT_PIT_HARDENING_GDD = (1200, 1700) # approximate, needs literature check
-ALT_OIL_ACCUMULATION_GDD = (1700, 2500)  # Tunç et al. range, approximate
-ALT_GDD_UPPER = 2700                 # harvest truncation at T_b=6.5
+# ── Soil-bucket parameters (wd_bucket predictor) ────────────────────────
+# Single-layer soil water reservoir as a physical alternative to the leaky
+# integrator. Field capacity = root-zone plant-available water; central value
+# from Lleida calcareous loam (~150 mm/m AWC × ~1 m effective rooting depth).
+SOIL_FIELD_CAPACITY_MM = 150.0   # reservoir size (mm); sweep 100/150/200 in Step 10
+SOIL_KC = 0.6                    # crop coefficient for actual ET drawdown
+SOIL_INIT_FRAC = 0.5             # initial storage as fraction of field capacity
+
+# Raw stage boundaries (Garrido et al. 2021 for S5–S8; S_pre is pipeline-defined)
+S_PRE_DOY = (1, 71)            # pre-inflorescence (winter rest / early vegetative)
+S5_DOY = (72, 138)             # inflorescence development (BBCH 51–59)
+S6_DOY = (136, 173)            # flowering (BBCH 61–69)
+S7_DOY = (168, 299)            # fruit development (BBCH 71–79)
+S8_DOY = (299, 327)            # maturation / harvest (BBCH 81–89)
+
+# Resolved non-overlapping boundaries (overlap days assigned to earlier stage)
+STAGES_RESOLVED = {
+    "S_pre": (1, 71),
+    "S5":    (72, 138),
+    "S6":    (139, 173),
+    "S7":    (174, 299),
+    "S8":    (300, 327),
+}
 
 # ── Basis parameters ─────────────────────────────────────────────────────
 N_BASIS = 5                    # cubic B-splines, start with 5

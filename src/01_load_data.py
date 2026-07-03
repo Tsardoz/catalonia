@@ -41,6 +41,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Fail when any requested cohort whitelist is missing.",
     )
+    parser.add_argument(
+        "--irrigated",
+        action="store_true",
+        help="Use irrigated yield (yield_irrig_tha / regadiu_ha) instead of rainfed.",
+    )
     return parser.parse_args()
 
 
@@ -85,13 +90,26 @@ def resolve_cohort_comarques(cohort_mode: str, strict: bool) -> dict[str, set[st
     return cohort_sets
 
 
-def load_yield_base() -> pd.DataFrame:
-    """Load olive yield and compute lagged yield per comarca."""
+def load_yield_base(irrigated: bool = False) -> pd.DataFrame:
+    """Load olive yield and compute lagged yield per comarca.
+
+    When *irrigated* is True, uses irrigated columns (regadiu_ha,
+    yield_irrig_tha) renamed to seca_ha / yield_tha for downstream
+    compatibility.  Rows with zero or missing irrigated area are dropped.
+    """
     raw = pd.read_csv(YIELD_CSV)
     olives = raw.query("pheno_key == 'olive'").copy()
     log.info(f"Olive yield rows (all comarques): {len(olives)}")
 
-    olives = olives[["year", "comarca", "seca_ha", "yield_tha"]].copy()
+    if irrigated:
+        olives = olives[["year", "comarca", "regadiu_ha", "yield_irrig_tha"]].copy()
+        olives = olives.rename(columns={"regadiu_ha": "seca_ha",
+                                        "yield_irrig_tha": "yield_tha"})
+        olives = olives.dropna(subset=["seca_ha", "yield_tha"])
+        olives = olives[(olives["seca_ha"] > 0) & (olives["yield_tha"] > 0)]
+        log.info(f"Irrigated olive yield rows after filtering: {len(olives)}")
+    else:
+        olives = olives[["year", "comarca", "seca_ha", "yield_tha"]].copy()
     olives = olives.sort_values(["comarca", "year"]).reset_index(drop=True)
     olives["lag_yield"] = olives.groupby("comarca")["yield_tha"].shift(1)
 
@@ -268,7 +286,7 @@ def main():
     cohort_sets = resolve_cohort_comarques(args.cohort, args.strict_cohorts)
 
     # 1. Yield
-    yield_base = load_yield_base()
+    yield_base = load_yield_base(irrigated=args.irrigated)
     yield_df = apply_cohorts(yield_base, cohort_sets)
     comarcas = set(yield_df["comarca"])
 
