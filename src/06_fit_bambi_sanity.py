@@ -3,13 +3,15 @@
 06_fit_bambi_sanity.py — Quick hierarchical sanity-check model with Bambi.
 
 This script is intentionally lightweight compared to the production NumPyro model.
-It aggregates functional predictors into stage means and fits:
+It aggregates functional predictors into five stage-window means and fits a
+calendar-DOY sanity check of the form:
 
-    yield_tha ~ stage_flowering + stage_pit + lag_yield + (1|comarca)
+    yield_tha ~ wd_S_pre + wd_S5 + wd_S6 + wd_S7 + wd_S8 + lag_yield [+ (1|year)]
 
 Default uses lag_yield WITHOUT year random effects (the plan warns against running
 both — they collide and lag_yield collapses to zero). Use --year-re to add (1|year)
-for the sensitivity comparison.
+for the sensitivity comparison. Comarca RE is omitted because Step 1 centers yield
+within comarca.
 """
 import argparse
 import json
@@ -21,8 +23,8 @@ import pandas as pd
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent))
 from utils.config import (
-    PROCESSED, POSTERIORS, TABLES, DEFAULT_COHORT,
-    PRE_FLOWERING_GDD, FLOWERING_GDD, PIT_HARDENING_GDD, OIL_ACCUMULATION_GDD,
+    PROCESSED, POSTERIORS, TABLES, DEFAULT_COHORT, PLAN_COHORTS,
+    STAGES_RESOLVED,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -37,16 +39,17 @@ PREDICTOR_FILES = {
 }
 
 STAGE_ALIASES = {
-    "pre_flowering": "preflower",
-    "flowering": "flowering",
-    "pit_hardening": "pit",
-    "oil_accumulation": "oil",
+    "S_pre": "S_pre",
+    "S5": "S5",
+    "S6": "S6",
+    "S7": "S7",
+    "S8": "S8",
 }
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Fit Bambi sanity model using stage-window means."
+        description="Fit Bambi sanity model using five stage-window means."
     )
     parser.add_argument(
         "--cohort",
@@ -68,11 +71,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--target-accept", type=float, default=0.90)
     parser.add_argument("--hdi-prob", type=float, default=0.90)
     parser.add_argument(
-        "--include-oil-stage",
-        action="store_true",
-        help="Include oil_accumulation stage mean as an extra fixed effect.",
-    )
-    parser.add_argument(
         "--year-re",
         action="store_true",
         help="Add (1|year) random effect (absorbs common-year shocks; "
@@ -85,7 +83,7 @@ def resolve_fit_cohorts(requested: str, obs_df: pd.DataFrame) -> list[str]:
     """Resolve which cohort fits to run based on CLI selection."""
     available = set(obs_df["cohort"].astype(str).unique())
     if requested == "both":
-        target = ["arbequina", "morruda", "all_olive"]
+        target = list(PLAN_COHORTS)
     elif requested == "all":
         target = ["all"]
     else:
@@ -121,32 +119,30 @@ def load_dependencies():
     return bmb, az
 
 
-def load_stage_anchors() -> dict[str, tuple[float, float]]:
-    """Load stage anchor windows; fallback to config defaults if needed."""
-    defaults = {
-        "pre_flowering": PRE_FLOWERING_GDD,
-        "flowering": FLOWERING_GDD,
-        "pit_hardening": PIT_HARDENING_GDD,
-        "oil_accumulation": OIL_ACCUMULATION_GDD,
-    }
+def load_stage_anchors() -> dict[str, tuple[int, int]]:
+    """Load calendar DOY anchor windows from phenology_anchors.csv."""
     path = PROCESSED / "phenology_anchors.csv"
     if not path.exists():
-        log.warning(f"{path} not found; using default anchor windows from config.")
-        return defaults
+        log.warning(f"{path} not found; using default resolved windows from config.")
+        return {name: (int(a), int(b)) for name, (a, b) in STAGES_RESOLVED.items()}
 
     anchors = pd.read_csv(path)
-    needed = set(defaults)
-    found: dict[str, tuple[float, float]] = {}
+    needed = set(STAGES_RESOLVED)
+    found: dict[str, tuple[int, int]] = {}
     for stage, grp in anchors.groupby("stage"):
         if stage not in needed:
             continue
         row = grp.iloc[0]
-        found[stage] = (float(row["gdd_start"]), float(row["gdd_end"]))
+        # Prefer resolved (non-overlapping) boundaries
+        for col_start, col_end in (("doy_start", "doy_end"), ("doy_start_raw", "doy_end_raw")):
+            if col_start in row and col_end in row:
+                found[stage] = (int(row[col_start]), int(row[col_end]))
+                break
 
-    for stage, fallback in defaults.items():
+    for stage, fallback in STAGES_RESOLVED.items():
         if stage not in found:
             log.warning(f"Stage '{stage}' missing in phenology_anchors.csv; using default {fallback}.")
-            found[stage] = fallback
+            found[stage] = (int(fallback[0]), int(fallback[1]))
     return found
 
 
@@ -160,7 +156,7 @@ def load_inputs(predictor: str) -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
 
     obs_index = pd.read_csv(PROCESSED / "obs_index.csv")
     yield_df = pd.read_csv(PROCESSED / "olive_yield.csv")
-    gdd_grid = np.load(PROCESSED / "gdd_grid.npy")
+    doy_grid = np.load(PROCESSED / "doy_grid.npy")
     matrix = np.load(predictor_path)
 
     if "cohort" not in obs_index.columns:
@@ -185,21 +181,18 @@ def load_inputs(predictor: str) -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
         raise ValueError(
             f"Row mismatch: matrix has {matrix.shape[0]} rows but obs_index has {len(merged)}."
         )
-    return merged, matrix, gdd_grid
+    return merged, matrix, doy_grid
 
 
 def add_stage_means(
     df: pd.DataFrame,
     matrix: np.ndarray,
-    gdd_grid: np.ndarray,
-    anchors: dict[str, tuple[float, float]],
+    doy_grid: np.ndarray,
+    anchors: dict[str, tuple[int, int]],
     predictor_prefix: str,
-    include_oil: bool,
 ) -> tuple[pd.DataFrame, list[str]]:
-    """Compute stage-window means for selected predictor and append to DataFrame."""
-    stages = ["pre_flowering", "flowering", "pit_hardening"]
-    if include_oil:
-        stages.append("oil_accumulation")
+    """Compute stage-window means for all five calendar stages and append to DataFrame."""
+    stages = ["S_pre", "S5", "S6", "S7", "S8"]
 
     out = df.copy()
     fixed_terms: list[str] = []
@@ -208,16 +201,16 @@ def add_stage_means(
 
     for stage in stages:
         start, end = anchors[stage]
-        mask = (gdd_grid >= start) & (gdd_grid <= end)
+        mask = (doy_grid >= start) & (doy_grid <= end)
         if not np.any(mask):
-            raise ValueError(f"No grid points found in stage window '{stage}' ({start}-{end} GDD).")
+            raise ValueError(f"No grid points found in stage window '{stage}' ({start}-{end} DOY).")
 
         alias = STAGE_ALIASES[stage]
         col = f"{predictor_prefix}_{alias}_mean"
         out[col] = matrix_sub[:, mask].mean(axis=1)
         fixed_terms.append(col)
         log.info(
-            f"Stage {stage}: {start:.0f}-{end:.0f} GDD, points={int(mask.sum())}, column={col}"
+            f"Stage {stage}: {start}-{end} DOY, points={int(mask.sum())}, column={col}"
         )
 
     return out, fixed_terms
@@ -258,7 +251,7 @@ def main():
     POSTERIORS.mkdir(parents=True, exist_ok=True)
     TABLES.mkdir(parents=True, exist_ok=True)
 
-    obs_df, matrix, gdd_grid = load_inputs(args.predictor)
+    obs_df, matrix, doy_grid = load_inputs(args.predictor)
     anchors = load_stage_anchors()
 
     fit_cohorts = resolve_fit_cohorts(args.cohort, obs_df)
@@ -279,10 +272,9 @@ def main():
         model_df, fixed_terms = add_stage_means(
             df=fit_df,
             matrix=matrix,
-            gdd_grid=gdd_grid,
+            doy_grid=doy_grid,
             anchors=anchors,
             predictor_prefix=args.predictor,
-            include_oil=args.include_oil_stage,
         )
 
         model_df["year"] = model_df["year"].astype(str).astype("category")
@@ -298,8 +290,6 @@ def main():
         low_ess = int((summary["ess_bulk"] < 400).sum()) if "ess_bulk" in summary.columns else 0
 
         stem = f"bambi_sanity_{cohort_name}_{args.predictor}"
-        if args.include_oil_stage:
-            stem += "_oil"
 
         idata_path = POSTERIORS / f"{stem}.nc"
         summary_path = TABLES / f"{stem}_summary.csv"
@@ -310,34 +300,49 @@ def main():
         summary.to_csv(summary_path)
         model_df.to_csv(data_path, index=False)
 
-        contrast_payload = {}
-        preflower_term = f"{args.predictor}_preflower_mean"
-        flower_term = f"{args.predictor}_flowering_mean"
-        pit_term = f"{args.predictor}_pit_mean"
+        # Calendar-axis contrasts
+        S_pre_term = f"{args.predictor}_S_pre_mean"
+        S5_term = f"{args.predictor}_S5_mean"
+        S6_term = f"{args.predictor}_S6_mean"
+        S7_term = f"{args.predictor}_S7_mean"
+        S8_term = f"{args.predictor}_S8_mean"
+
         contrasts = []
-        # pit − flower (original headline contrast)
-        if flower_term in idata.posterior and pit_term in idata.posterior:
-            delta = (idata.posterior[pit_term] - idata.posterior[flower_term]).values.reshape(-1)
+        # Headline: S7 − S6 (fruit development vs flowering)
+        if S7_term in idata.posterior and S6_term in idata.posterior:
+            delta = (idata.posterior[S7_term] - idata.posterior[S6_term]).values.reshape(-1)
             contrasts.append({
-                "delta_name": f"{pit_term} - {flower_term}",
+                "delta_name": f"{S7_term} - {S6_term}",
                 "delta_median": float(np.median(delta)),
                 "delta_q05": float(np.quantile(delta, 0.05)),
                 "delta_q95": float(np.quantile(delta, 0.95)),
                 "prob_delta_gt_0": float((delta > 0).mean()),
             })
-        # flower − preflower (new: does sensitivity differ before vs during flowering?)
-        if preflower_term in idata.posterior and flower_term in idata.posterior:
-            delta_pf = (idata.posterior[flower_term] - idata.posterior[preflower_term]).values.reshape(-1)
+        # S6 − S5 (flowering vs inflorescence)
+        if S6_term in idata.posterior and S5_term in idata.posterior:
+            delta_s6_s5 = (idata.posterior[S6_term] - idata.posterior[S5_term]).values.reshape(-1)
             contrasts.append({
-                "delta_name": f"{flower_term} - {preflower_term}",
-                "delta_median": float(np.median(delta_pf)),
-                "delta_q05": float(np.quantile(delta_pf, 0.05)),
-                "delta_q95": float(np.quantile(delta_pf, 0.95)),
-                "prob_delta_gt_0": float((delta_pf > 0).mean()),
+                "delta_name": f"{S6_term} - {S5_term}",
+                "delta_median": float(np.median(delta_s6_s5)),
+                "delta_q05": float(np.quantile(delta_s6_s5, 0.05)),
+                "delta_q95": float(np.quantile(delta_s6_s5, 0.95)),
+                "prob_delta_gt_0": float((delta_s6_s5 > 0).mean()),
             })
+        # S5 − S_pre (inflorescence vs winter rest)
+        if S5_term in idata.posterior and S_pre_term in idata.posterior:
+            delta_s5_spre = (idata.posterior[S5_term] - idata.posterior[S_pre_term]).values.reshape(-1)
+            contrasts.append({
+                "delta_name": f"{S5_term} - {S_pre_term}",
+                "delta_median": float(np.median(delta_s5_spre)),
+                "delta_q05": float(np.quantile(delta_s5_spre, 0.05)),
+                "delta_q95": float(np.quantile(delta_s5_spre, 0.95)),
+                "prob_delta_gt_0": float((delta_s5_spre > 0).mean()),
+            })
+
+        contrast_payload = {}
         if contrasts:
             contrast_payload = {
-                **contrasts[0],             # headline: pit − flower
+                **contrasts[0],             # headline: S7 − S6
                 "all_contrasts": contrasts,  # full list for JSON output
             }
 

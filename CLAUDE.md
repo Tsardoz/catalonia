@@ -72,31 +72,34 @@ pipeline is single-source area-weighted, not a two-source hybrid.
 ## Olive Water Sensitivity Pipeline
 
 The current olive analysis uses a hierarchical Bayesian scalar-on-function regression
-(see `olive_water_sensitivity_plan.md` for the full design). Execute steps sequentially:
+(see `olive_water_sensitivity_plan.md` for the full design). The literature-derived
+GDD axis has been retired; the current pipeline uses fixed calendar windows anchored
+to observed Arbequina phenology in Garrido et al. 2021. Execute steps sequentially:
 
 ```bash
 # Step 1: Load cohort-filtered yield + daily climate, compute lag yield
 python src/01_load_data.py --cohort both
 
-# Step 2: Re-express daily climate on a common GDD axis (T_b=10°C)
-python src/02_compute_gdd.py            # --base 7/8.5/12.5 for sensitivity
+# Step 2: Prepare the fixed calendar DOY phenology axis
+python src/02_prepare_doy_axis.py
 
-# Step 3: Build WD (P − ET0) and VPD predictor matrices on GDD axis
+# Step 3: Build WD (P − ET0) and VPD predictor matrices on the calendar DOY axis
 python src/03_compute_water_deficit.py
 
-# Step 4: Write literature-based phenological anchor windows
+# Step 4: Write calendar-window phenological anchors (S5–S8)
 python src/04_align_phenology.py
 
-# Step 5: Construct B-spline basis and pre-compute reduced functional predictors
+# Step 5: Construct B-spline basis and pre-compute reduced functional predictors on the DOY grid
 python src/05_build_basis.py             # --n-basis 4/5/6/8 for sensitivity
 
-# Step 6: Bambi hierarchical sanity check (stage-mean aggregated predictors)
+# Step 6: Bambi hierarchical sanity check (stage-window aggregated predictors)
 python src/06_fit_bambi_sanity.py --cohort both --predictor wd
 ```
 
-Steps 7–10 (NumPyro production model, posterior contrast, LOYO stability,
-sensitivity analyses) are specified in `olive_water_sensitivity_plan.md` but not
-yet implemented.
+Steps 7–10 (`07_fit_numpyro_main.py` through `10_sensitivity_analysis.py`) are
+implemented and have been run on the calendar DOY axis. Step 10 is partial
+(Arbequina CWB-state sweep complete; VPD and all-olive sweeps pending). The
+retired GDD-axis artifacts have been deleted from `results/`.
 
 ### Supporting tools
 
@@ -143,11 +146,11 @@ Analysis scripts → figures/*.png
 
 - **Olive area weighting**: `extract_climate_olive_weighted.py` aggregates AgERA5 cells per comarca using DUN 2024 olive area per cell as weights (`data/dun/olive_dun_grid_cells_2024.csv`). This replaces the unweighted comarca mean for olive analysis.
 
-- **Scalar-on-function regression**: The current olive analysis (`src/01_load_data.py` through `src/06_fit_bambi_sanity.py`, with NumPyro production model planned) estimates phenological-stage-specific water sensitivity via a hierarchical Bayesian model with B-spline basis on a common GDD axis. See `olive_water_sensitivity_plan.md` for the full design.
+- **Scalar-on-function regression**: The current olive analysis (`src/01_load_data.py` through `src/10_sensitivity_analysis.py`) estimates phenological-stage-specific water sensitivity via a hierarchical Bayesian model with B-spline basis on a fixed calendar day-of-year axis (Arbequina windows from Garrido et al. 2021; the older GDD axis is retired). See `olive_water_sensitivity_plan.md` for the full design.
 
 - **Cultivar restriction**: For the headline Arbequina analysis, the panel is restricted to 10 comarques where Arbequina is ≥ 90 % of rainfed olive area and rainfed Arbequina ≥ 500 ha (DUN 2024 cultivar shares; whitelist at `data/dun/comarca_arbequina_whitelist.csv`). This restriction tripled the within-R² of the canonical Tmax timing regression despite a 43 % drop in n, by removing cross-cultivar heterogeneity.
 
-- **Fixed effects**: Comarca dummy variables absorb baseline yield differences in regression models (yield varies ~5× across comarcas for structural reasons).
+- **Within-estimator centering**: Step 1 subtracts per-(cohort, comarca) means from `yield_tha` and `lag_yield`, so the production model does not include a comarca random effect.
 
 ## Critical Implementation Details
 
@@ -190,11 +193,12 @@ Download these 5 variables for 2015-2024 (50 files total):
 ### Agronomic Year
 
 Olive yield in year Y is driven by climate accumulated during the calendar year Y.
-GDD accumulation (T_b=10°C) starts from January 1; December contributes ~0 GDD in
-Catalonia, so the Jan 1 reset is standard practice and matches the cited phenology
-literature. The calendar-based seasonal pipeline (aggregate_seasonal.py) may reference
-a Dec–Nov agronomic window for precipitation, but the GDD-based functional pipeline
-(Steps 1–6) uses the calendar year.
+The current functional olive pipeline uses fixed calendar day-of-year windows from
+January 1 through harvest truncation at DOY 327 (~23 November). The broader
+seasonal pipeline (`aggregate_seasonal.py`) may reference a Dec–Nov agronomic
+window for precipitation, but the scalar-on-function olive pipeline uses the
+calendar year. A PEP725-derived GDD axis is future work; the older
+literature-derived GDD axis has been retired.
 
 ### Target Crops
 
@@ -235,9 +239,9 @@ analyses that filter on `yield_tha > 0` are unaffected.
 ## Documentation
 
 - **WARP.md**: Complete pipeline documentation (data sources, variable definitions, spatial methodology, output schemas). **Single source of truth** for pipeline operations.
-- **olive_water_sensitivity_plan.md**: Current olive analysis design (hierarchical Bayesian scalar-on-function regression, cultivar cohorts, GDD phenological anchors, stability checks). **Primary source** for analysis methodology.
+- **olive_water_sensitivity_plan.md**: Current olive analysis design (hierarchical Bayesian scalar-on-function regression, calendar DOY phenology windows, within-estimator centering, LOYO/sensitivity checks). **Primary source** for olive methodology.
 
-Refer to these files for detailed specifications. They document not just what the code does but **why design decisions were made** (e.g., why openpyxl, why T_b=10°C, why not rolling-window OLS).
+Refer to these files for detailed specifications. They document not just what the code does but **why design decisions were made** (e.g., why openpyxl, why fixed calendar windows, why not rolling-window OLS). If older prose elsewhere conflicts with the olive plan, `olive_water_sensitivity_plan.md` wins for the olive pipeline.
 
 ## Known Limitations
 
@@ -253,11 +257,22 @@ Bayesian scalar-on-function regression. The prior sliding-window approach suffer
 window-overlap artifacts and physiologically implausible sign-stable negative precipitation
 coefficients. See `olive_water_sensitivity_plan.md` for the full rationale.
 
-The current pipeline (Steps 1–6) is implemented. Steps 7–10 (NumPyro production model,
-posterior contrast, LOYO stability, sensitivity analyses) are designed but not yet coded.
+The current olive methodology uses fixed calendar windows (Garrido et al. 2021) on a
+DOY axis; the earlier literature-derived GDD axis was retired after sensitivity work
+showed the headline contrast could flip under plausible base-temperature choices.
+
+Steps 1–10 have been implemented and run on the current calendar DOY axis; the
+retired GDD-axis artifacts have been deleted. Step 10 is partial: the Arbequina
+CWB-state sensitivity sweep (τ × k × year-RE, ±10-day window shift, irrigated
+negative control) is complete; the VPD predictor sweep and the all-olive Step 10
+remain. Both cohorts (Arbequina n = 90; all-olive ≥ 500 ha n = 162) converged
+cleanly in Steps 7–9.
 
 **Design decisions carried forward from prior work:**
-- Cultivar restriction to Arbequina-dominant comarques (10 comarques, ≥90% rainfed Arbequina, ≥500 ha)
-- Two-cultivar comparison: Arbequina (headline) + Morruda (corroboration)
-- Lag yield as a covariate (alternate bearing)
+- Two-cohort comparison: Arbequina (headline) + All olive (breadth check)
+- Within-estimator centering of `yield_tha` and `lag_yield`, so no comarca RE in the production model
+- Lag yield retained as a covariate, with year RE as a sensitivity comparison
 - Irrigated panel as a negative control
+- Headline posterior contrast defined as `Δ(S7 − S6)` on calendar windows; the
+  most robust result is the `Δ(S7 − S_pre)` contrast (P(diff) 0.95–0.99, LOYO-stable),
+  while `Δ(S7 − S6)` is directional but LOYO-sensitive

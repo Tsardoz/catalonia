@@ -15,7 +15,7 @@
   "sd_eps": 1e-06,
   "exclude_year": 2017,
   "stem_suffix": "",
-  "bad_rhat_count_gt_1.01": 0,
+  "bad_rhat_count_gt_1.01": 1,
   "low_ess_bulk_count_lt_400": 0,
   "files": {
     "posterior_netcdf": "/home/tsardoz/phd/catalonia/results/posteriors/numpyro_main_arbequina_wd_state_excl2017.nc",

@@ -38,6 +38,7 @@ PREDICTOR_REDUCED_FILES = {
     "wd_state": "WD_state_reduced.npy",
     "wd": "WD_reduced.npy",
     "wd30": "WD30_reduced.npy",
+    "wd_bucket": "WD_bucket_reduced.npy",
     "vpd": "VPD_reduced.npy",
     "tmin": "TMIN_reduced.npy",
     "tmax": "TMAX_reduced.npy",
@@ -50,9 +51,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--cohort",
-        choices=["arbequina", "morruda", "all_olive", "both", "all"],
-        default="both",
-        help="Cultivar cohort(s) to fit (default: both).",
+        choices=["arbequina", "all_olive"],
+        default="arbequina",
+        help="Cultivar cohort to fit (default: arbequina).",
     )
     parser.add_argument(
         "--predictor",
@@ -95,23 +96,12 @@ def parse_args() -> argparse.Namespace:
 
 def resolve_fit_cohorts(requested: str, obs_df: pd.DataFrame) -> list[str]:
     available = set(obs_df["cohort"].astype(str).unique())
-    if requested == "both":
-        target = ["arbequina", "morruda", "all_olive"]
-    elif requested == "all":
-        target = ["all"]
-    else:
-        target = [requested]
-
-    if "all" in target:
-        return target
-
-    missing = [c for c in target if c not in available]
-    if missing:
+    if requested not in available:
         raise ValueError(
-            f"Requested cohort(s) missing from processed data: {missing}. "
-            "Run Step 1 with --cohort both after creating required whitelist(s)."
+            f"Cohort '{requested}' missing from processed data (found: {sorted(available)}). "
+            "Run Step 1 first."
         )
-    return target
+    return [requested]
 
 
 def load_dependencies():
@@ -412,6 +402,7 @@ def fit_one(
 def main():
     args = parse_args()
     az, jax, jnp, lax, numpyro, dist, MCMC, NUTS = load_dependencies()
+    jax.config.update("jax_platforms", "cpu")
 
     POSTERIORS.mkdir(parents=True, exist_ok=True)
     TABLES.mkdir(parents=True, exist_ok=True)
@@ -421,10 +412,7 @@ def main():
     final_rows = []
 
     for cohort_name in fit_cohorts:
-        if cohort_name == "all":
-            fit_df = obs_df.copy()
-        else:
-            fit_df = obs_df[obs_df["cohort"] == cohort_name].copy()
+        fit_df = obs_df[obs_df["cohort"] == cohort_name].copy()
         if fit_df.empty:
             raise ValueError(
                 f"No rows available for cohort='{cohort_name}'. Run Step 1 first."
@@ -466,9 +454,17 @@ def main():
         final_rows.append(row)
 
     final_report = pd.DataFrame(final_rows).sort_values(["cohort", "predictor"]).reset_index(drop=True)
-    final_report_path = TABLES / "final_numpyro_model_report.csv"
-    final_report.to_csv(final_report_path, index=False)
-    log.info(f"Saved final NumPyro model report: {final_report_path}")
+    # Only write the aggregate report for main (non-fold, non-sensitivity) runs;
+    # fold/sensitivity runs already write their own per-stem _meta.json.
+    if args.exclude_year is None and not args.stem_suffix:
+        final_report_path = TABLES / "final_numpyro_model_report.csv"
+        final_report.to_csv(final_report_path, index=False)
+        log.info(f"Saved final NumPyro model report: {final_report_path}")
+    else:
+        log.info(
+            "Skipping final_numpyro_model_report.csv "
+            "(fold/sensitivity run — see per-stem _meta.json)."
+        )
 
 
 if __name__ == "__main__":

@@ -2,13 +2,13 @@
 """
 01_load_data.py — Data ingestion for olive water sensitivity analysis.
 
-Loads three sources:
+Loads two sources:
   1. Comarca-level annual olive yield (filtered to cultivar cohorts)
   2. Daily climate per comarca (T_min, T_max, precip, ET0, VPD)
-  3. Pre-computed GDD and water balance
 
-Validates coverage, computes lag yield, and writes model-ready files to
-data/processed/.
+Validates climate coverage (Jan 1 through harvest, DOY 327), computes lag yield,
+applies within-estimator comarca-mean centering, and writes model-ready files
+to data/processed/.
 """
 import argparse
 import logging
@@ -18,8 +18,8 @@ import pandas as pd
 
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent))
 from utils.config import (
-    YIELD_CSV, DAILY_CLIMATE_CSV, GDD_CSV, WATER_BALANCE_CSV,
-    COHORT_WHITELISTS, PROCESSED, MAX_MISSING_FRAC, TABLES,
+    YIELD_CSV, DAILY_CLIMATE_CSV,
+    COHORT_WHITELISTS, PLAN_COHORTS, PROCESSED, MAX_MISSING_FRAC, DOY_END, TABLES,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -31,15 +31,14 @@ def parse_args() -> argparse.Namespace:
         description="Load cohort-filtered yield and climate inputs."
     )
     parser.add_argument(
-        "--cohort",
-        choices=["arbequina", "morruda", "all_olive", "both"],
-        default="both",
-        help="Cultivar cohort(s) to include (default: both = all registered).",
-    )
-    parser.add_argument(
-        "--strict-cohorts",
-        action="store_true",
-        help="Fail when any requested cohort whitelist is missing.",
+        "--min-rainfed-ha",
+        type=float,
+        default=500.0,
+        help=(
+            "Minimum mean rainfed olive area (ha) for a comarca to be included in "
+            "the all_olive cohort. Computed as the mean seca_ha across all years "
+            "with valid rainfed yield. Default: 500 ha."
+        ),
     )
     parser.add_argument(
         "--irrigated",
@@ -49,44 +48,42 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def resolve_cohort_comarques(cohort_mode: str, strict: bool) -> dict[str, set[str]]:
-    """Load cohort whitelist comarques."""
-    requested = list(COHORT_WHITELISTS.keys()) if cohort_mode == "both" else [cohort_mode]
+def resolve_cohort_comarques(
+    all_olive_comarques: set[str]
+) -> dict[str, set[str]]:
+    """
+    Build comarca sets for all PLAN_COHORTS.
+
+    - 'arbequina': filtered via DUN cultivar-fraction whitelist (≥90% Arbequina).
+    - 'all_olive': all comarcas in all_olive_comarques (already area-filtered
+      upstream by --min-rainfed-ha before this function is called).
+    """
     cohort_sets: dict[str, set[str]] = {}
 
-    for cohort in requested:
+    for cohort in PLAN_COHORTS:
+        if cohort == "all_olive":
+            cohort_sets[cohort] = all_olive_comarques
+            log.info(
+                f"Cohort 'all_olive': {len(all_olive_comarques)} comarques "
+                "(all rainfed olive yield — no dominance filter)"
+            )
+            continue
+
         path = COHORT_WHITELISTS[cohort]
         if not path.exists():
-            msg = (
+            raise FileNotFoundError(
                 f"Whitelist not found for cohort '{cohort}': {path}. "
                 "Create it first from DUN cultivar fractions."
             )
-            if strict:
-                raise FileNotFoundError(msg)
-            log.warning(msg + " Skipping this cohort.")
-            continue
-
         whitelist = pd.read_csv(path)
         if "comarca" not in whitelist.columns:
             raise ValueError(f"Whitelist missing required 'comarca' column: {path}")
-
         comarques = set(whitelist["comarca"].dropna().astype(str).str.strip())
         if not comarques:
-            msg = f"Cohort '{cohort}' whitelist has no comarques: {path}"
-            if strict:
-                raise ValueError(msg)
-            log.warning(msg + " Skipping this cohort.")
-            continue
-
+            raise ValueError(f"Cohort '{cohort}' whitelist is empty: {path}")
         cohort_sets[cohort] = comarques
-        log.info(
-            f"Cohort '{cohort}': {len(comarques)} comarques from {path.name}"
-        )
+        log.info(f"Cohort '{cohort}': {len(comarques)} comarques from {path.name}")
 
-    if not cohort_sets:
-        raise ValueError(
-            "No cohort could be loaded. Provide at least one valid whitelist in data/dun/."
-        )
     return cohort_sets
 
 
@@ -152,17 +149,24 @@ def load_daily_climate(comarcas: set[str]) -> pd.DataFrame:
 def validate_coverage(yield_df: pd.DataFrame, climate_df: pd.DataFrame) -> pd.DataFrame:
     """
     Check that every cohort-comarca-year in yield has near-complete daily climate
-    from Jan 1 through Dec 31. Drop rows with >5% missing days.
+    from Jan 1 through harvest (DOY_END ≈ Nov 23). Drop rows with >5% missing.
+    Feb 29 is excluded so the expected count equals DOY_END (327) days.
     """
+    clim = climate_df.copy()
+    month = clim["date"].dt.month
+    day = clim["date"].dt.day
+    is_feb29 = (month == 2) & (day == 29)
+    # DOY_END=327 → Nov 23 on non-leap calendar
+    in_window = (month < 11) | ((month == 11) & (day <= 23))
+    clim = clim[in_window & ~is_feb29]
+
     coverage = (
-        climate_df
+        clim
         .groupby(["comarca", "year"])["date"]
         .agg(n_days="count")
         .reset_index()
     )
-    coverage["expected"] = coverage["year"].apply(
-        lambda y: 366 if (y % 4 == 0 and (y % 100 != 0 or y % 400 == 0)) else 365
-    )
+    coverage["expected"] = DOY_END  # 327 non-leap DOYs
     coverage["frac_missing"] = 1.0 - coverage["n_days"] / coverage["expected"]
 
     merged = yield_df.merge(coverage, on=["comarca", "year"], how="left")
@@ -182,20 +186,6 @@ def validate_coverage(yield_df: pd.DataFrame, climate_df: pd.DataFrame) -> pd.Da
     return good[yield_df.columns].reset_index(drop=True)
 
 
-def load_gdd(comarcas: set[str]) -> pd.DataFrame:
-    """Load pre-computed GDD (T_b=10)."""
-    gdd = pd.read_csv(GDD_CSV, parse_dates=["date"])
-    gdd = gdd[gdd["comarca"].isin(comarcas)].copy()
-    log.info(f"GDD data: {len(gdd)} rows")
-    return gdd
-
-
-def load_water_balance(comarcas: set[str]) -> pd.DataFrame:
-    """Load pre-computed P - ET0."""
-    wb = pd.read_csv(WATER_BALANCE_CSV, parse_dates=["date"])
-    wb = wb[wb["comarca"].isin(comarcas)].copy()
-    log.info(f"Water balance data: {len(wb)} rows")
-    return wb
 
 
 def center_yield_by_comarca(
@@ -283,14 +273,27 @@ def main():
     args = parse_args()
     PROCESSED.mkdir(parents=True, exist_ok=True)
 
-    cohort_sets = resolve_cohort_comarques(args.cohort, args.strict_cohorts)
-
-    # 1. Yield
+    # 1. Yield — load first so all_olive can derive its comarca set from data
     yield_base = load_yield_base(irrigated=args.irrigated)
+
+    # Filter all_olive comarcas by minimum mean rainfed area
+    mean_area = yield_base.groupby("comarca")["seca_ha"].mean()
+    all_olive_comarques = set(mean_area[mean_area >= args.min_rainfed_ha].index)
+    excluded = set(yield_base["comarca"].unique()) - all_olive_comarques
+    log.info(
+        f"all_olive area filter: >= {args.min_rainfed_ha:.0f} ha mean rainfed "
+        f"→ {len(all_olive_comarques)} comarques kept, {len(excluded)} excluded"
+    )
+    if excluded:
+        log.info(f"  Excluded: {sorted(excluded)}")
+
+    cohort_sets = resolve_cohort_comarques(all_olive_comarques)
     yield_df = apply_cohorts(yield_base, cohort_sets)
     comarcas = set(yield_df["comarca"])
 
-    # 2. Daily climate
+    # 2. Daily climate — loaded only for coverage validation
+    #    Steps 2 and 3 read agera5_daily_catalonia.csv directly; no filtered
+    #    copy is written, so irrigated/rainfed switches never corrupt it.
     climate_df = load_daily_climate(comarcas)
 
     # 3. Validate coverage
@@ -300,22 +303,9 @@ def main():
     # 4. Center yield by comarca mean (within-estimator; comarca RE not needed in model)
     yield_df, comarca_means = center_yield_by_comarca(yield_df)
 
-    # 5. GDD + water balance
-    gdd_df = load_gdd(comarcas)
-    wb_df = load_water_balance(comarcas)
-
-    # 6. Save processed datasets
+    # 5. Save processed datasets
     yield_df.to_csv(PROCESSED / "olive_yield.csv", index=False)
     comarca_means.to_csv(PROCESSED / "comarca_yield_means.csv", index=False)
-    climate_df[climate_df["comarca"].isin(comarcas)].to_csv(
-        PROCESSED / "daily_climate.csv", index=False
-    )
-    gdd_df[gdd_df["comarca"].isin(comarcas)].to_csv(
-        PROCESSED / "gdd.csv", index=False
-    )
-    wb_df[wb_df["comarca"].isin(comarcas)].to_csv(
-        PROCESSED / "water_balance.csv", index=False
-    )
     write_cultivar_yield_reports(yield_df)
     log.info(f"  comarca_yield_means.csv: {len(comarca_means)} rows")
 

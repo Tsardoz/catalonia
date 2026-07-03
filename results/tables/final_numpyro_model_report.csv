@@ -1,2 +1,2 @@
 cohort,predictor,include_year_re,n_obs,n_comarcas,n_years,bad_rhat_count_gt_1.01,low_ess_bulk_count_lt_400,chain_method
-all_olive,wd_state,True,152,19,8,0,0,sequential
+all_olive,wd_state,True,162,18,9,0,0,vectorized

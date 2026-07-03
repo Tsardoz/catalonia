@@ -1,0 +1,3710 @@
+
+I have 1000 records from pep725 of growth stage id spanning 2013 to 2021 for olives in Catalonia.
+GDD has weaknesses. I can also use daily weather observations and determine cultivar based off DUN and lat/lon.
+Come up with a better plan than GDD for predicting phenological stage from these data
+
+s_id provider_id lon lat alt alt_dem gss_id genus species subspecies phase_id year day date cult_season license_short
+20398 1401 0.96555 41.0836 87 86 1950100 Olea Olea europaea 60 2013 122 2013-05-02 0 CC BY-NC 4.0
+20399 1401 1.013 41.1268 132 139 1950100 Olea Olea europaea 65 2013 122 2013-05-02 0 CC BY-NC 4.0
+
+
+
+
+
+
+
+
+
+12 minutes ago
+Favicon for anthropic
+Claude Opus 4.7
+Reasoning
+A Better-Than-GDD Plan for Olive Phenology in Catalonia
+GDD's core weaknesses for olive (Olea europaea) are: (1) it ignores winter chilling, which olive requires to break floral bud dormancy; (2) it assumes a linear response with a single base temperature; (3) it ignores supra-optimal heat damage (>30 °C suppresses olive bud development); (4) it lumps cultivars; and (5) it ignores water stress, frost, and photoperiod modulation. Below is a layered plan that fixes each of these.
+
+1. Target structure & label engineering
+You have BBCH codes (phase_id 60 = beginning of flowering, 65 = full flowering, etc.). Don't model "DOY of stage X" as independent regressions — model the stage trajectory for each site-year.
+
+Reformulate as time-to-event per stage transition: from a fixed biofix (e.g., Jan 1 or end-of-endodormancy) to the observed DOY of each BBCH code.
+For the 1000 obs, build a long-format table: (site, year, cultivar, stage, observed_DOY, daily_weather[Jan1..DOY]).
+Stages are ordered, so enforce monotonic constraints (DOY₆₀ ≤ DOY₆₅ ≤ DOY₆₉…) using either an ordinal regression or sequential survival framing.
+2. Cultivar attribution from DUN + lat/lon
+The Catalan DUN (Declaració Única Agrària) parcel data lets you replace "unknown cultivar" with a probabilistic assignment.
+
+
+
+10 citations
+
+Favicon for http://agricultura.gencat.cat/ca/ambits/desenvolupament-rural/sigpac/mapa-cultius/
+
+Favicon for http://agricultura.gencat.cat/ca/ambits/desenvolupament-rural/sigpac/aplicacio-cromos-dun-sigpac/
+
+Favicon for http://agricultura.gencat.cat/ca/ambits/desenvolupament-rural/sigpac/descarregues/
+
+Favicon for https://datos.gob.es/ca/catalogo/a09002970-datos-del-parcelario-de-las-explotaciones-agrarias-de-catalunya
+
+Favicon for https://exteriors.gencat.cat/es/tramits/tramits-temes/6497_Declaracio-unica-Agraria-DUN
+
+Favicon for https://mdpi-res.com/d_attachment/plants/plants-12-01714/article_deploy/plants-12-01714.pdf?version=1681981321
+
+Favicon for https://www.mdpi.com/2223-7747/12/18/3181
+
+Favicon for https://repositorio.ulisboa.pt/handle/10400.5/8170
+
+Favicon for https://www.sciencedirect.com/science/article/abs/pii/S1161030118306348
+
+Favicon for https://www.sciencedirect.com/science/article/abs/pii/S0168192304000632
+Mapa de cultius DUN-SIGPAC. Departament d'Agricultura, Ramaderia, Pesca i Alimentació
+http://agricultura.gencat.cat/ca/ambits/desenvolupament-rural/sigpac/mapa-cultius/
+Favicon for http://agricultura.gencat.cat/ca/ambits/desenvolupament-rural/sigpac/mapa-cultius/
+agricultura.gencat.cat
+Aplicació CROMOS. Departament d'Agricultura, Ramaderia, Pesca i Alimentació
+http://agricultura.gencat.cat/ca/ambits/desenvolupament-rural/sigpac/aplicacio-cromos-dun-sigpac/
+Favicon for http://agricultura.gencat.cat/ca/ambits/desenvolupament-rural/sigpac/aplicacio-cromos-dun-sigpac/
+agricultura.gencat.cat
+Descàrregues. Departament d'Agricultura, Ramaderia, Pesca i Alimentació
+http://agricultura.gencat.cat/ca/ambits/desenvolupament-rural/sigpac/descarregues/
+Favicon for http://agricultura.gencat.cat/ca/ambits/desenvolupament-rural/sigpac/descarregues/
+agricultura.gencat.cat
+Dades de parcel·les d’explotacions (DUN) de Catalunya - Conjunt de dades - Datos.gob.es
+https://datos.gob.es/ca/catalogo/a09002970-datos-del-parcelario-de-las-explotaciones-agrarias-de-catalunya
+Favicon for https://datos.gob.es/ca/catalogo/a09002970-datos-del-parcelario-de-las-explotaciones-agrarias-de-catalunya
+datos.gob.es
+DUN - Declaración agraria. Departamento de Unión Europea y Acción Exterior
+https://exteriors.gencat.cat/es/tramits/tramits-temes/6497_Declaracio-unica-Agraria-DUN
+Favicon for https://exteriors.gencat.cat/es/tramits/tramits-temes/6497_Declaracio-unica-Agraria-DUN
+exteriors.gencat.cat
+https://mdpi-res.com/d_attachment/plants/plants-12-01714/article_deploy/plants-12-01714.pdf?version=1681981321
+https://mdpi-res.com/d_attachment/plants/plants-12-01714/article_deploy/plants-12-01714.pdf?version=1681981321
+Favicon for https://mdpi-res.com/d_attachment/plants/plants-12-01714/article_deploy/plants-12-01714.pdf?version=1681981321
+mdpi-res.com
+Modeling Phenological Phases across Olive Cultivars in the Mediterranean
+https://www.mdpi.com/2223-7747/12/18/3181
+Favicon for https://www.mdpi.com/2223-7747/12/18/3181
+www.mdpi.com
+Evaluation of olive flowering at low latitude sites in Argentina using a chilling requirement model
+https://repositorio.ulisboa.pt/handle/10400.5/8170
+Favicon for https://repositorio.ulisboa.pt/handle/10400.5/8170
+repositorio.ulisboa.pt
+A simple model simulating development and growth of an olive grove
+https://www.sciencedirect.com/science/article/abs/pii/S1161030118306348
+Favicon for https://www.sciencedirect.com/science/article/abs/pii/S1161030118306348
+www.sciencedirect.com
+Chilling and forcing model to predict bud-burst of crop and forest species
+https://www.sciencedirect.com/science/article/abs/pii/S0168192304000632
+Favicon for https://www.sciencedirect.com/science/article/abs/pii/S0168192304000632
+www.sciencedirect.com
+Previous slideNext slide
+Searched for DUN Catalonia DUN olive cultivar parcel SIGPAC variety declaration
+5 results
+Searched for olive phenology chilling forcing model De Melo-Abreu UniChill BBCH 60
+5 results
+Workflow:
+
+Spatially join each PEP725 site (lon, lat) to the DUN-SIGPAC parcel polygons (annual shapefiles 2020+, plus historical "Mapa de cultius DUN-SIGPAC"). The DUN declares cultivar at the recinte level for olives.
+For pre-2020 years, back-cast cultivar via the modal cultivar in a 1–3 km buffer (cultivar persistence is high — olives live decades).
+Build a cultivar prior p(c∣lon,lat). In Catalonia this will be heavily Arbequina-dominant in Lleida/Les Garrigues/Siurana DOPs, Empeltre in Terra Alta/Bajo Aragón fringe, and Argudell/Corbella/Morrut/Sevillenca/Farga in coastal Tarragona/Girona.
+Treat cultivar as a latent categorical variable with this prior when DUN is ambiguous, and marginalise it inside the model (or use EM).
+3. Replace GDD with a sequential chill→force model (the literature consensus winner for olive)
+The De Melo-Abreu (2004) chill–force model and the Cesaraccio "Chill Days" model both outperform plain GDD for olive flowering with RMSE ~2–5 days. Build the following process backbone, then layer ML on top.
+
+Stage A — Chilling accumulation (Oct 1 → end of endodormancy), per hour h:
+
+CU
+h
+​
+ =f
+c
+​
+ (T
+h
+​
+ ),f
+c
+​
+ (T)=exp[−
+2
+1
+​
+ (
+σ
+c
+​
+
+T−T
+c
+∗
+​
+
+​
+ )
+2
+ ]−λ⋅1[T>T
+neg
+​
+ ](T−T
+neg
+​
+ )
+
+with T
+c
+∗
+​
+ ≈7–11°C (fit per cultivar — recent work suggests 11 °C for olive is better than DMA's 7.3 °C), and a negation term for T>16°C (warm-spell de-acclimation, critical under Catalan winters). Endodormancy ends when ∑CU
+h
+​
+ ≥C
+R
+​
+ (c) where C
+R
+​
+  is cultivar-specific (Arbequina ≈ 339 CU; higher for Empeltre/Frantoio-types).
+
+Stage B — Forcing accumulation from endodormancy release to BBCH 60/65:
+
+F
+d
+​
+ =
+1+exp[−b(T
+d
+​
+ −T
+f
+​
+ )]
+1
+​
+ ⋅1[T
+d
+​
+ <T
+max
+​
+ ]
+
+A logistic (sigmoidal) response instead of linear GDD captures both the low-T cutoff and the high-T plateau/damage above ~30 °C. BBCH 60 fires when ∑F
+d
+​
+ ≥F
+R
+60
+​
+ (c), BBCH 65 at F
+R
+65
+​
+ (c)>F
+R
+60
+​
+ (c), etc.
+
+This is essentially PhenoFlex (Luedeling), which has well-tested R/Python implementations and joint-fits chill+force parameters.
+
+4. Add the covariates that GDD ignores
+5. Final model architecture — three options, ranked
+Option A (recommended): Hybrid process-guided gradient boosting
+Run the chill–force model to produce, for each (site, year, candidate cultivar): predicted DOY of BBCH 60/65/69, accumulated CU at endodormancy, forcing-state at each calendar day, and "chill deficit" flags.
+Feed these process outputs plus the raw weather features from §4 into a gradient-boosted regressor (XGBoost/LightGBM with monotone constraints on stage order) or a CatBoost model that handles cultivar natively.
+Train target: residual between observed DOY and chill–force prediction (Δ-correction). This way the process model carries the physics; ML only learns what the process model misses.
+Use quantile regression (objective=quantile) to emit prediction intervals — useful for management.
+Option B: Bayesian hierarchical chill–force
+
+DOY_stage[i] ~ Normal(mu[i], sigma_c)
+mu[i] = f_chillforce(weather[site,year], theta[cultivar[i]])
+theta[c] ~ MVN(theta_pop, Sigma)         # partial pooling across cultivars
+cultivar[i] ~ Categorical(p(c | lon,lat)) # DUN prior
+Implement in Stan/NumPyro. Wins on uncertainty quantification and on small-n cultivars. Handles the latent-cultivar problem cleanly.
+
+Option C: Sequence model (only if you can augment data)
+A small 1D-CNN or Temporal Fusion Transformer on daily [T
+min
+​
+ ,T
+max
+​
+ ,T
+mean
+​
+ ,RH,P,R
+s
+​
+ ] from Oct 1 to predicted DOY, with cultivar + lat/lon embedding. With only 1000 records this will likely overfit — use it only with strong regularisation, leave-one-year-out CV, and process-model pretraining.
+
+6. Validation protocol (this matters more than the model choice)
+Leave-one-year-out CV (2013–2021): tests transferability to unseen climate.
+Spatial block CV by comarca: tests transferability to unseen sites.
+Leave-one-cultivar-out: tests that the cultivar component generalises.
+Metrics: RMSE in days, MAE, % of predictions within ±5 d, and CRPS for probabilistic outputs.
+Benchmark against a plain-GDD baseline (with cultivar-specific T
+b
+​
+  and F
+R
+​
+ ) — your improvement is the headline result.
+Sanity check: the model should reproduce the chill-deficit "no-flowering" failures that have appeared in southern Spain in mild winters; GDD cannot.
+7. Pragmatic build order
+Geocode all 1000 points → DUN cultivar attribution; compute the lat/lon cultivar prior.
+Pull daily weather: ERA5-Land (9 km, 1950–present, hourly→daily) plus Meteocat XEMA stations for bias-correction. Lapse-correct to site alt.
+Compute classical GDD baseline (publish RMSE).
+Fit De Melo-Abreu / PhenoFlex chill–force per cultivar (use chillR in R or port to Python). Publish RMSE.
+Train Option A hybrid; compare under all three CV schemes.
+If Bayesian credible intervals are needed for downstream decisions, also fit Option B.
+Why this beats GDD on your specific data
+Catalan winters are warm enough that chill failure is a real signal — GDD is structurally blind to it.
+Cultivar heterogeneity between Arbequina (low chill) and Empeltre/Argudell (higher chill) is identifiable from DUN and changes C
+R
+​
+  by 2–3×.
+Coastal vs Lleida-interior climates differ in both winter chill and spring forcing — a sequential chill→force model captures the interaction; GDD does not.
+Hybrid process+ML gives you mechanistic interpretability (publishable) and the residual learning that pure process models lack.
+Want me to sketch the actual Python/R code for the chill–force fit (chillR::PhenoFlex_GDHwrapper) or the ERA5-Land extraction pipeline next?
+
+
+
+
+
+
+
+
+
+
+12 minutes ago
+Favicon for x-ai
+Grok 4.20
+Reasoning
+Searched for olive phenology modeling BBCH flowering prediction chilling forcing units beyond GDD
+5 results
+Searched for PEP725 olive Catalonia phenological stages predictive models
+5 results
+https://mdpi-res.com/d_attachment/plants/plants-12-01714/article_deploy/plants-12-01714.pdf?version=1681981321
+https://www.mdpi.com/2223-7747/12/18/3181
+A better approach than simple GDD is a hybrid two-phase (chilling + forcing) process-based model, calibrated on your local data and enhanced with machine learning (ML) to incorporate cultivar, spatial, and additional weather variables. This directly addresses GDD’s core weaknesses: it ignores winter chilling requirements for dormancy release/flower induction, assumes linear temperature responses, overlooks cultivar differences, photoperiod, water stress, extremes, and spatial heterogeneity in Catalonia.
+
+Recent Mediterranean olive research (especially in Italy, highly relevant to Catalonia’s climate) shows strong gains from chilling-forcing models (e.g., CAC_GDD or variants using Dynamic/Utah/Gaussian chilling) over pure GDD, with RMSE often ~4–8 days for flowering in validation. Your ~1000 PEP725 records (2013–2021, with phase_id likely BBCH codes such as 60 = beginning of flowering, 65 = full flowering) across multiple sites provide an excellent dataset for regional calibration—better than many published studies that rely on sparser data. Being able to identify cultivars (via DUN + lat/lon) is a major advantage, as requirements differ between early- and mid-late-budbreak types.
+
+Recommended Hybrid Modeling Framework
+Core physiological backbone: A CAC_GDD-style model (Chill and Anti-Chill days + Growing Degree Days).
+
+Chilling phase (endo-dormancy release, typically Oct/Nov–Feb/Mar): Accumulate chill units (CU). Use multiple formulations and let data decide:
+Traditional: Chilling Hours (<7.2°C), Utah model, Dynamic Model (Chill Portions—often most robust), DMA (De Melo-Abreu).
+Improved: Gaussian-centered around ~11°C (optimal for olive flower induction per controlled experiments) with negation/anti-chill for warm interruptions (>15–17°C). Warm spells during winter can reduce effective chilling.
+Forcing phase (eco-dormancy to observed stage): From the end of chilling (or a dynamic sprouting date), accumulate forcing units (GDD with optimized base ~5–6.5°C, or Growing Degree Hours). Upper threshold (~28–30°C) to avoid over-accumulation on very hot days.
+Optimize parameters (chill threshold/requirement, GDD base, heat requirement, etc.) per cultivar group (or early vs. mid-late clusters) using genetic algorithms or similar optimizers on your observations. Start accumulation dates can be optimized or fixed (e.g., Nov 1 for chilling).
+This is interpretable, physiologically grounded, and has shown superior performance (RMSE ~4 days for blooming in mid-late cultivars) vs. more complex models like PhenoFlex when data are scattered/limited, as in heterogeneous Mediterranean regions.
+
+ML enhancement layer (the key upgrade for your dataset):
+
+Use process-model outputs (accumulated CU at a date, predicted sprouting DOY, accumulated GDD from sprouting) as strong input features.
+Add rich predictors from your daily weather + auxiliary data:
+Cumulative precip, vapor pressure deficit (VPD), or soil moisture proxy over key windows (winter drought has limited direct effect in some studies, but spring water stress matters for flowering intensity).
+Extremes: Frost days during sensitive periods, hot days (>30–35°C) that can damage flowers.
+Photoperiod/daylength on the date.
+Spatial: lat, lon, altitude (alt vs. alt_dem), distance to coast, slope/aspect (from DEM), climate/soil zone.
+Cultivar (as categorical or one-hot; critical due to differing chill requirements).
+Temporal: DOY, year (for trends), previous-year chilling or proxy for alternate bearing (fruit load memory strongly suppresses flowering even after cold winters—PEP725 may lack direct fruit data, so flag or proxy this).
+Targets:
+Primary: Regression for DOY of key stages (filter to phase_id = 60, 65, etc.).
+Alternative: Predict current BBCH stage (classification/ordinal regression) given weather sequence up to a date, or time-to-event (survival analysis) for stage transitions.
+Algorithms (start simple, scale up):
+XGBoost, LightGBM, or Random Forest: Excellent baseline. Handles interactions, non-linearities, missing data; provides feature importance (you’ll likely see chilling accumulation, cultivar, and spring forcing as top predictors).
+Mixed-effects models (if many repeated observations per site/cultivar) or GAMs for semi-parametric flexibility.
+If restructuring as daily time series per site-year: LSTM/Transformer (with regularization; your ~1000 records likely correspond to fewer unique site-years, so use CV carefully).
+Hybrid benefit: The process model captures the main thermal driver; ML captures residuals from additional drivers, microclimate variation across Catalonia (coastal, inland, pre-Pyrenees), and cultivar effects.
+This is superior to pure GDD because it:
+
+Models the two-phase biology (chilling first, then forcing).
+Is calibrated to Catalonia olives using your PEP725 + weather data.
+Incorporates genotype × environment (cultivar from DUN/lat-lon; spatial features).
+Captures non-temperature effects and interactions that GDD ignores.
+Step-by-Step Implementation Plan
+Data Integration & Feature Engineering (most time-consuming, highest impact)
+
+Assign cultivars or early/mid-late groups using DUN + location.
+Merge daily weather (prefer high-resolution Catalonia grids from SMC/Meteorological Service of Catalonia or ERA5-Land over point stations for consistency).
+Compute accumulations from a sensible start (e.g., previous Oct 1 or Nov 1). For each observation, calculate CU/GDD up to the observed date using multiple methods.
+Add all auxiliary features listed above. Create “accumulated up to DOY X” features for flexible prediction.
+Build & Calibrate the Process Model
+
+Implement CAC (chill/anti-chill) for sprouting/budbreak, then GDD from that date for flowering/pit hardening (if you have those phases).
+Optimize parameters separately by cultivar group on your full or cross-validated data (tools: R GA package, Python Nevergrad/DEAP, or scipy.optimize).
+Compare variants (Dynamic vs. Gaussian+negation chilling). Expect better fit for mid-late cultivars.
+Train ML / Hybrid Model
+
+Use process-model outputs as features + all engineered variables.
+Strong baselines: XGBoost regressor for DOY of BBCH 65 (or key stages); evaluate with RMSE/MAE in days.
+For “predict current stage”: Train on daily-resolved data if feasible.
+Rigorous Validation
+
+Cross-validation: Temporal (train early years, test later), spatial (leave-one-site or lat-band out), by cultivar group. Use leave-one-out if data per group is limited.
+Metrics: RMSE/MAE (days), correlation, Taylor diagrams (standard in these papers), bias.
+Compare explicitly to baseline GDD (you should see clear improvement, especially in warm or variable winters).
+Check residuals for patterns (e.g., alternate bearing years, extreme events).
+Deployment & Extensions
+
+Operational tool: Given current-year weather + location + cultivar, predict dates of key stages or current stage probability.
+Climate risk: Drive with future scenarios to project shifts in flowering timing and overlap with heat/drought in Catalonia.
+Augment if needed: Remote sensing (NDVI accumulation or plant phenology index from Sentinel/Landsat) has improved ML models in some studies; soil data; management proxies.
+Link to Fenocat (Catalonia phenology network, contributor to PEP725) for more data or validation.
+Expected Performance & Evidence
+Published Mediterranean olive work (Italy sites, ERA5 weather, similar BBCH stages) shows CAC_GDD achieving ~4-day RMSE for blooming (mid-late cultivars) and good generalization with limited observations—better than complex PhenoFlex in heterogeneous settings. Your larger dataset + cultivar info + local high-quality weather should yield even stronger results. ML layers routinely improve thermal-time models by 20–50% in phenology applications when adding geography and non-temp variables.
+
+Key references to implement:
+
+Didevarasl et al. (2023) “Modeling Phenological Phases across Olive Cultivars in the Mediterranean” — CAC_GDD details, optimization, early vs. mid-late, validation stats.
+Engelen et al. (2023) on chilling units — Gaussian ~11°C model, negation for warm temps, fruit-load importance.
+Related: Papers using PLS to delineate chilling/forcing periods, ML with ERA5 + slope/latitude, and PEP725/Fenocat context for Catalonia.
+This plan is actionable with your data, scalable, interpretable where needed, and predictive where useful. Start with the process-based calibration on key flowering stages (BBCH 60/65), then layer ML. If you share more details (exact phase_id meanings, number of unique sites/cultivars, weather source), I can refine further or suggest specific code structures.
+
+
+
+10 citations
+
+Favicon for https://ui.adsabs.harvard.edu/abs/2024EGUGA..2610317D/abstract
+
+Favicon for https://mdpi-res.com/d_attachment/plants/plants-12-01714/article_deploy/plants-12-01714.pdf?version=1681981321
+
+Favicon for https://www.mdpi.com/2223-7747/12/18/3181
+
+Favicon for https://hal.inrae.fr/hal-04011667v1/file/2022_Abou-Saaid_agronomy.pdf
+
+Favicon for https://ui.adsabs.harvard.edu/abs/2002IJBm...46....2O/abstract
+
+Favicon for https://link.springer.com/article/10.1007/s00484-014-0876-7?error=cookies_not_supported&code=d1a48f35-204f-407a-9034-d3dc9131a22d
+
+Favicon for https://www.mdpi.com/2072-4292/13/6/1224
+
+Favicon for http://adsabs.harvard.edu/abs/2017EGUGA..1917650B
+
+Favicon for https://pep725.eu/
+
+Favicon for https://pmc.ncbi.nlm.nih.gov/articles/PMC8230019/
+Modeling Olive Phenological Phases for Agro-Climate Risk Assessment in a Changing Future Climate over the Euro-Mediterranean Region - ADS
+https://ui.adsabs.harvard.edu/abs/2024EGUGA..2610317D/abstract
+Favicon for https://ui.adsabs.harvard.edu/abs/2024EGUGA..2610317D/abstract
+ui.adsabs.harvard.edu
+https://mdpi-res.com/d_attachment/plants/plants-12-01714/article_deploy/plants-12-01714.pdf?version=1681981321
+https://mdpi-res.com/d_attachment/plants/plants-12-01714/article_deploy/plants-12-01714.pdf?version=1681981321
+Favicon for https://mdpi-res.com/d_attachment/plants/plants-12-01714/article_deploy/plants-12-01714.pdf?version=1681981321
+mdpi-res.com
+Modeling Phenological Phases across Olive Cultivars in the Mediterranean
+https://www.mdpi.com/2223-7747/12/18/3181
+Favicon for https://www.mdpi.com/2223-7747/12/18/3181
+www.mdpi.com
+https://hal.inrae.fr/hal-04011667v1/file/2022_Abou-Saaid_agronomy.pdf
+https://hal.inrae.fr/hal-04011667v1/file/2022_Abou-Saaid_agronomy.pdf
+Favicon for https://hal.inrae.fr/hal-04011667v1/file/2022_Abou-Saaid_agronomy.pdf
+hal.inrae.fr
+The use of phenological data to calculate chilling units in Olea europaea L. in relation to the onset of reproduction - NASA/ADS
+https://ui.adsabs.harvard.edu/abs/2002IJBm...46....2O/abstract
+Favicon for https://ui.adsabs.harvard.edu/abs/2002IJBm...46....2O/abstract
+ui.adsabs.harvard.edu
+Phenological models to predict the main flowering phases of olive ( Olea europaea L.) along a latitudinal and longitudinal gradient across the Mediterranean region
+https://link.springer.com/article/10.1007/s00484-014-0876-7?error=cookies_not_supported&code=d1a48f35-204f-407a-9034-d3dc9131a22d
+Favicon for https://link.springer.com/article/10.1007/s00484-014-0876-7?error=cookies_not_supported&code=d1a48f35-204f-407a-9034-d3dc9131a22d
+link.springer.com
+Comparison of Climate Reanalysis and Remote-Sensing Data for Predicting Olive Phenology through Machine-Learning Methods
+https://www.mdpi.com/2072-4292/13/6/1224
+Favicon for https://www.mdpi.com/2072-4292/13/6/1224
+www.mdpi.com
+The Phenological Network of Catalonia: an historical perspective - ADS
+http://adsabs.harvard.edu/abs/2017EGUGA..1917650B
+Favicon for http://adsabs.harvard.edu/abs/2017EGUGA..1917650B
+adsabs.harvard.edu
+PEP725: Homepage
+https://pep725.eu/
+Favicon for https://pep725.eu/
+pep725.eu
+A Phenological Model for Olive ( Olea europaea L. var europaea ) Growing in Italy
+https://pmc.ncbi.nlm.nih.gov/articles/PMC8230019/
+Favicon for https://pmc.ncbi.nlm.nih.gov/articles/PMC8230019/
+pmc.ncbi.nlm.nih.gov
+Previous slideNext slide
+
+
+
+
+
+
+
+12 minutes ago
+Favicon for openai
+GPT-5.5
+Below is a stronger plan than plain Growing Degree Days for predicting olive phenological stage in Catalonia using your PEP725 records, daily weather, location, and cultivar information inferred from DUN parcels.
+
+Core idea
+Instead of modeling phenology as a simple function of accumulated heat, model it as a cultivar- and site-specific ordinal time process driven by nonlinear weather responses.
+
+In other words, predict the probability that a site-cultivar-year is in stage k on day t:
+
+P(S
+i,t
+​
+ =k∣weather history,cultivar,site,year)
+where S
+i,t
+​
+  is the phenological stage for observation unit i on day t.
+
+This is better than GDD because olive phenology depends not only on heat accumulation, but also on:
+
+winter chilling,
+spring forcing,
+drought and rainfall,
+vapor pressure deficit,
+solar radiation,
+photoperiod,
+frost or heat stress,
+cultivar,
+elevation and coastal influence,
+site-level management and microclimate.
+Recommended modeling strategy
+1. Treat phenology as an ordered, monotonic process
+Your phase_id values appear to be ordered phenological stages. Instead of predicting stage as an ordinary categorical label, treat it as an ordinal stage.
+
+For each site-year-cultivar trajectory, the stage should generally move forward through time:
+
+S
+t+1
+​
+ ≥S
+t
+​
+
+A good model should respect this biological constraint.
+
+Recommended target formulation
+Use a discrete-time transition model or ordinal survival model.
+
+For each stage transition, model the daily probability of moving from stage k to stage k+1:
+
+P(S
+t+1
+​
+ >S
+t
+​
+ ∣S
+t
+​
+ =k)=σ(α
+k
+​
+ +f
+k
+​
+ (X
+t
+​
+ )+b
+cultivar,k
+​
+ +b
+site,k
+​
+ +b
+year,k
+​
+ )
+where:
+
+σ is the logistic function,
+α
+k
+​
+  is the baseline transition tendency for stage k,
+X
+t
+​
+  contains weather-history features up to day t,
+b
+cultivar,k
+​
+  is a cultivar effect,
+b
+site,k
+​
+  is a site effect,
+b
+year,k
+​
+  captures broad annual conditions.
+This directly predicts the probability of phenological advance each day.
+
+2. Build a daily panel dataset
+Your PEP725 observations are event-like records. Convert them into a daily panel.
+
+For every unique combination of:
+
+site,
+year,
+inferred cultivar,
+maybe provider or observation program,
+create one row per day from winter through the growing season.
+
+Example daily panel:
+
+site_id	year	date	doy	cultivar	lat	lon	alt	observed_phase	predicted_phase
+1401_0.96555_41.0836	2013	2013-05-01	121	Arbequina	41.0836	0.96555	87	NA	60
+1401_0.96555_41.0836	2013	2013-05-02	122	Arbequina	41.0836	0.96555	87	60	60
+1401_0.96555_41.0836	2013	2013-05-03	123	Arbequina	41.0836	0.96555	87	NA	61
+The model should be trained using the observed dates but generate daily predictions.
+
+3. Use weather history, not just daily weather
+Phenology responds to accumulated and lagged conditions. For each day, build features summarizing the previous weather.
+
+Temperature features
+Instead of raw GDD, use multiple nonlinear and lagged temperature summaries:
+
+mean temperature,
+minimum temperature,
+maximum temperature,
+number of frost days,
+spring heat accumulation,
+winter chill accumulation,
+heat stress days,
+temperature anomalies relative to site climatology.
+Useful features:
+
+Feature	Example
+Rolling mean temperature	previous 7, 14, 30 days
+Rolling minimum temperature	previous 7, 14, 30 days
+Rolling maximum temperature	previous 7, 14, 30 days
+Frost exposure	days with T
+min
+​
+ <0
+∘
+ C
+Cold stress	cumulative degrees below 2
+∘
+ C
+Heat stress	days with T
+max
+​
+ >30
+∘
+ C or 35
+∘
+ C
+Forcing accumulation	nonlinear temperature response since dormancy release
+Chilling accumulation	chill portions or chill hours from autumn/winter
+A better forcing function than linear GDD is a nonlinear temperature response. For example, instead of:
+
+max(0,T−T
+base
+​
+ )
+use a response curve where forcing increases up to an optimum and declines under excessive heat.
+
+Conceptually:
+
+F
+t
+​
+ =f(T
+t
+​
+ )
+where f(T
+t
+​
+ ) is low under cold conditions, high near the optimum, and reduced under damaging heat.
+
+Chilling features
+Olive reproductive development is influenced by winter conditions. Add chilling metrics such as:
+
+chill hours below a threshold,
+Utah chill units,
+dynamic model chill portions,
+number of days with mean temperature between roughly 2
+∘
+ C and 12
+∘
+ C,
+winter warm spell frequency.
+Example features:
+
+Feature	Period
+Chill hours	November to February
+Chill portions	November to March
+Winter mean temperature	December to February
+Winter warm days	days with T
+max
+​
+ >18
+∘
+ C during winter
+Even if the exact olive chilling model is uncertain, these features let the model learn whether winter conditions affect spring stage timing.
+
+Water and drought features
+For Mediterranean olives, water status can matter a lot.
+
+Include:
+
+daily precipitation,
+cumulative rainfall over 7, 14, 30, 60, and 90 days,
+number of dry days,
+evapotranspiration,
+water balance,
+vapor pressure deficit,
+relative humidity,
+soil moisture, if available,
+drought index, such as SPEI or SPI.
+Useful features:
+
+WaterBalance
+30
+​
+ =
+d=t−30
+∑
+t
+​
+ P
+d
+​
+ −
+d=t−30
+∑
+t
+​
+ ET0
+d
+​
+
+where P
+d
+​
+  is precipitation and ET0
+d
+​
+  is reference evapotranspiration.
+
+For olives, this may help separate years with similar GDD but different flowering, fruit set, or ripening progression.
+
+Radiation and photoperiod
+Add:
+
+day length,
+solar radiation,
+cumulative radiation,
+cloudiness if available.
+Photoperiod is deterministic from latitude and day of year, so it is easy to compute.
+
+Photoperiod
+i,t
+​
+ =g(lat
+i
+​
+ ,doy
+t
+​
+ )
+This helps the model avoid unrealistic predictions caused by warm winter spells.
+
+4. Infer cultivar from DUN, but propagate uncertainty
+Use DUN parcels and lat/lon to infer cultivar.
+
+Recommended workflow:
+
+Spatially join each PEP725 point to DUN olive parcels.
+Use a small buffer, for example 25 to 100 m depending on coordinate precision.
+If one cultivar dominates nearby parcels, assign that cultivar.
+If several cultivars are plausible, keep probabilities instead of forcing a single label.
+Harmonize cultivar names.
+Example:
+
+s_id	lat	lon	nearest_DUN_cultivar	distance_m	cultivar_probability
+20398	41.0836	0.96555	Arbequina	18	0.92
+20399	41.1268	1.01300	Arbequina	41	0.75
+Then include cultivar in the model as:
+
+a fixed categorical feature in tree models, or
+a random effect in a hierarchical model.
+For example:
+
+b
+cultivar,k
+​
+ ∼N(0,σ
+cultivar,k
+2
+​
+ )
+This allows different cultivars to reach the same stage earlier or later under the same weather.
+
+5. Recommended model family
+Given that you have about 1,000 records, I would avoid large neural networks unless you add much more data. Use models that work well with small to medium ecological datasets.
+
+Best practical option
+Use a two-model system:
+
+Biological ordinal transition model
+Machine-learning residual correction
+Model A: hierarchical ordinal transition model
+This is your main interpretable model.
+
+It predicts daily transition probabilities with weather-history features, cultivar, and site/year effects.
+
+Advantages:
+
+respects stage ordering,
+handles irregular observation dates,
+gives uncertainty,
+works with modest sample sizes,
+lets you compare cultivar effects,
+less likely to overfit than deep learning.
+Possible implementations:
+
+Bayesian model in Stan or PyMC,
+cumulative ordinal model in brms,
+generalized additive mixed model using mgcv,
+discrete-time survival model with logistic regression or GAM.
+Model B: gradient boosting correction
+Fit a LightGBM, XGBoost, or CatBoost model to improve predictive accuracy.
+
+Use it to predict either:
+
+stage directly as an ordinal target, or
+residual timing error from Model A.
+Good features for boosting:
+
+day of year,
+latitude,
+longitude,
+altitude,
+cultivar,
+chill metrics,
+forcing metrics,
+water balance,
+rolling temperature summaries,
+rainfall lags,
+radiation lags,
+VPD lags,
+previous predicted stage from Model A.
+This gives you both interpretability and predictive power.
+
+6. Specific model design
+State variable
+Let S
+i,t
+​
+  be the phenological stage for site-year i on day t.
+
+The model predicts transitions:
+
+h
+i,k,t
+​
+ =P(S
+i,t+1
+​
+ >k∣S
+i,t
+​
+ =k)
+with:
+
+logit(h
+i,k,t
+​
+ )=α
+k
+​
+ +f
+k,1
+​
+ (forcing
+i,t
+​
+ )+f
+k,2
+​
+ (chill
+i,t
+​
+ )+f
+k,3
+​
+ (water
+i,t
+​
+ )+f
+k,4
+​
+ (photoperiod
+i,t
+​
+ )+b
+cultivar[i],k
+​
+ +b
+site[i],k
+​
+ +b
+year[i],k
+​
+
+Use smooth functions f
+k,j
+​
+  rather than assuming linear responses.
+
+For example:
+
+
+gam(
+  transition ~
+    s(forcing_30) +
+    s(chill_winter) +
+    s(water_balance_30) +
+    s(vpd_14) +
+    s(photoperiod) +
+    cultivar +
+    s(site_id, bs = "re") +
+    s(year, bs = "re"),
+  family = binomial(),
+  data = transition_data
+)
+If you prefer Python, you could use:
+
+pygam,
+statsmodels,
+scikit-survival,
+xgboost,
+lightgbm,
+pymc.
+7. How to handle irregular observations
+PEP725 observations may not tell you the exact transition date. They tell you the stage observed on a date.
+
+For example:
+
+
+2013-05-02, phase_id = 60
+This means the tree was at stage 60 on that day, but it may have entered stage 60 earlier.
+
+So treat transition dates as interval-censored where possible.
+
+If the same site-year has:
+
+
+2013-04-20, phase_id = 55
+2013-05-02, phase_id = 60
+then the transition to stage 60 happened between April 20 and May 2.
+
+That is:
+
+T
+60
+​
+ ∈[2013-04-20,2013-05-02]
+This is better than pretending the transition happened exactly on May 2.
+
+If you only have isolated records, use an ordinal likelihood:
+
+P(S
+i,t
+​
+ =k)
+rather than forcing an exact transition date.
+
+8. Feature set to build
+A useful starting feature set is below.
+
+Static features
+Feature	Source
+Latitude	PEP725
+Longitude	PEP725
+Altitude	PEP725 or DEM
+Distance to coast	GIS
+Slope/aspect	DEM
+Cultivar	DUN spatial join
+Provider or observer	PEP725
+Site ID	derived
+Year	date
+Calendar and astronomical features
+Feature
+Day of year
+Photoperiod
+Solar declination
+Week of year
+Sine/cosine of day of year
+Use cyclic encoding:
+
+x
+1
+​
+ =sin(
+365
+2π⋅doy
+​
+ )
+x
+2
+​
+ =cos(
+365
+2π⋅doy
+​
+ )
+Temperature features
+Feature	Windows
+Mean temperature	1, 3, 7, 14, 30, 60 days
+Minimum temperature	1, 3, 7, 14, 30 days
+Maximum temperature	1, 3, 7, 14, 30 days
+Frost days	7, 14, 30, winter
+Heat-stress days	7, 14, 30 days
+Nonlinear forcing	since Jan 1 or chill completion
+Winter chill	Nov-Feb or Nov-Mar
+Moisture features
+Feature	Windows
+Rainfall sum	7, 14, 30, 60, 90 days
+Dry-day count	14, 30, 60 days
+ET0 sum	7, 14, 30 days
+Water balance	14, 30, 60 days
+Relative humidity	7, 14, 30 days
+VPD	7, 14, 30 days
+Soil moisture	if available
+Radiation features
+Feature	Windows
+Solar radiation	7, 14, 30 days
+Cloud cover	7, 14, 30 days
+Sunshine hours	7, 14, 30 days
+9. Validation plan
+Do not randomly split individual rows. That will overestimate performance because nearby days, sites, and years are correlated.
+
+Use blocked validation.
+
+Minimum validation design
+Use three tests:
+
+A. Leave-one-year-out
+Train on 2013 to 2020, test on 2021. Rotate this through all years.
+
+This tests whether the model predicts new years.
+
+B. Leave-one-site-out
+Hold out some sites entirely.
+
+This tests spatial generalization.
+
+C. Leave-one-cultivar-out or rare-cultivar test
+If you have enough cultivar diversity, test whether the model generalizes to cultivars with little data.
+
+10. Evaluation metrics
+Use metrics that respect the task.
+
+For stage prediction
+Metric	Meaning
+Ordinal MAE	average absolute stage error
+Within-one-stage accuracy	tolerant classification
+Weighted Cohen's kappa	ordinal agreement
+Cross-entropy	probabilistic accuracy
+Ordinal MAE:
+
+MAE
+stage
+​
+ =
+n
+1
+​
+
+i=1
+∑
+n
+​
+ ∣
+S
+^
+
+i
+​
+ −S
+i
+​
+ ∣
+For transition-date prediction
+If you estimate transition dates:
+
+Metric	Meaning
+MAE in days	average date error
+RMSE in days	penalizes large errors
+bias in days	whether model is early or late
+prediction interval coverage	uncertainty calibration
+Date MAE:
+
+MAE
+days
+​
+ =
+n
+1
+​
+
+i=1
+∑
+n
+​
+ ∣
+T
+^
+
+i
+​
+ −T
+i
+​
+ ∣
+Compare everything against a GDD baseline using the same train/test splits.
+
+11. Baselines to beat
+You should benchmark against several increasingly strong baselines.
+
+Baseline	Description
+Calendar model	stage predicted from day of year only
+Site-calendar model	day of year plus site
+Classic GDD	fixed base temperature accumulation
+Cultivar-specific GDD	separate threshold or GDD requirement by cultivar
+Chill plus GDD	winter chilling plus spring forcing
+Proposed model	ordinal transition model with nonlinear weather, water, cultivar, site effects
+This prevents claiming improvement over a weak GDD implementation only.
+
+12. Recommended final pipeline
+Step-by-step
+Clean PEP725 records
+
+Check dates, phase IDs, duplicate rows, invalid coordinates.
+Confirm phase ordering.
+Group records by site-year.
+Infer cultivar
+
+Spatial join PEP725 coordinates to DUN olive parcels.
+Assign cultivar with confidence score.
+Keep unknown or probabilistic cultivar where uncertain.
+Attach weather
+
+Use nearest high-quality station, interpolated station grid, or gridded reanalysis.
+Correct temperature for altitude if needed.
+Create daily weather series for each site.
+Engineer weather-history features
+
+Chill metrics.
+Nonlinear heat forcing.
+Rainfall and drought metrics.
+VPD, humidity, ET0.
+Radiation and photoperiod.
+Rolling windows and cumulative anomalies.
+Create daily phenology panel
+
+One row per site-year-day.
+Add observed phase when available.
+Encode transitions or ordinal observation likelihood.
+Fit GDD baselines
+
+Fixed GDD.
+Cultivar-specific GDD.
+Chill plus GDD.
+Fit main model
+
+Hierarchical ordinal transition model or GAM-based discrete survival model.
+Fit optional boosting correction
+
+LightGBM or CatBoost.
+Use blocked cross-validation.
+Validate
+
+Leave-year-out.
+Leave-site-out.
+Compare with GDD baselines.
+Produce outputs
+
+Daily predicted stage.
+Probability over stages.
+Estimated transition dates.
+Uncertainty intervals.
+Cultivar-specific phenology curves.
+Practical recommendation
+For your dataset size, I would start with this:
+
+First model to build
+A discrete-time ordinal transition GAMM:
+
+
+transition ~
+  s(doy) +
+  s(photoperiod) +
+  s(chill_winter) +
+  s(forcing_nonlinear) +
+  s(water_balance_30) +
+  s(vpd_14) +
+  s(rain_30) +
+  cultivar +
+  s(lat, lon) +
+  s(altitude) +
+  s(site_id, bs = "re") +
+  s(year, bs = "re")
+Then compare it against:
+
+
+phase_id ~ GDD
+and:
+
+
+phase_id ~ GDD + cultivar
+The proposed model should be materially better because it captures:
+
+winter history,
+spring forcing,
+drought,
+cultivar timing,
+spatial gradients,
+year effects,
+nonlinear response to weather.
+Final recommendation
+Do not replace GDD with a black-box daily classifier immediately. Replace it with a weather-driven ordinal phenology model.
+
+The best plan is:
+
+Build a daily, cultivar-aware, site-aware, ordinal transition model using nonlinear temperature forcing, winter chill, water balance, VPD, radiation, and photoperiod; validate it with blocked year/site splits against calendar and GDD baselines.
+
+This gives you a model that is biologically more realistic than GDD, statistically appropriate for ordered phenological stages, and practical for a dataset of roughly 1,000 observations.
+
+
+
+
+
+
+
+
+
+
+Could I use Bayesian functional regression and treat it as a time series?
+
+
+
+
+
+
+
+
+
+4 minutes ago
+Favicon for anthropic
+Claude Opus 4.7
+Yes — Bayesian Functional Regression Is a Strong Fit Here
+In fact, for your data structure (daily weather curves → a discrete event time) it's arguably more principled than the hybrid process+ML approach, because it treats the temperature/VPD trajectory as what it actually is: a function over time, not a bag of summary statistics. Here's how to do it well, and where the traps are.
+
+1. Why functional regression fits this problem
+Your predictor for each site-year is a curve X
+i
+​
+ (t) — daily T
+min
+​
+ ,T
+max
+​
+ ,VPD,P,R
+s
+​
+  from some biofix (say Oct 1 of year y−1) up to the stage event. Your response is the DOY of BBCH stage s. GDD is actually a very restrictive functional model:
+
+GDD
+i
+​
+ =∫
+t
+0
+​
+
+T
+​
+ max(0,X
+i
+​
+ (t)−T
+b
+​
+ )dt
+
+i.e. a functional linear model with a fixed, hand-chosen, non-smooth weight function β(t)=1[t≤T] and a fixed nonlinearity. Bayesian functional regression learns β(t) and the nonlinearity from data, with uncertainty.
+
+2. Recommended specification: Bayesian Functional Concurrent + Historical model
+Treat each stage transition as a time-to-event with a hazard that depends on the recent history of weather. For site-year i, day t:
+
+logh
+i
+​
+ (t)=α
+c(i)
+​
+ +
+k
+∑
+​
+ ∫
+t−L
+k
+​
+
+t
+​
+ β
+k
+​
+ (t,u)X
+i,k
+​
+ (u)du+z
+i
+⊤
+​
+ γ
+
+where:
+
+k indexes weather channels (T
+min
+​
+ ,T
+max
+​
+ ,VPD,P,…),
+β
+k
+​
+ (t,u) is a smooth bivariate coefficient surface — the weight given to channel k at lag t−u when evaluating hazard at calendar day t,
+L
+k
+​
+  is a maximum lag (e.g., 180 d to span dormancy),
+z
+i
+​
+  holds scalar covariates (lat, lon, alt, prior-year load),
+α
+c(i)
+​
+  is a cultivar random intercept (with the DUN-derived prior from before).
+Event time = observed DOY of BBCH s. Fit one model per stage, or — better — a joint multi-state model with shared β
+k
+​
+  surfaces but stage-specific intercepts, enforcing T
+60
+​
+ <T
+65
+​
+ <T
+69
+​
+ .
+
+This is the Bayesian functional Cox / functional hazard formulation (Gellar et al. 2015; Goldsmith et al.; the refund ecosystem). It subsumes GDD as a special case and lets the data tell you:
+
+where the chilling window actually is (you'll see β
+T
+min
+​
+
+​
+ (t,u) go negative in Nov–Jan — cold advances the event),
+where the forcing window is (β
+T
+max
+​
+
+​
+  goes positive in Feb–Apr),
+and the cutoff temperatures, via a nonlinear extension (below).
+3. Make it nonlinear without losing interpretability
+A pure linear functional model still can't express "heat above 30 °C is damaging." Two clean Bayesian extensions:
+
+(a) Functional Generalized Additive Model (FGAM):
+
+logh
+i
+​
+ (t)=α
+c(i)
+​
+ +
+k
+∑
+​
+ ∫F
+k
+​
+ (u,X
+i,k
+​
+ (u))du
+
+where F
+k
+​
+ (u,x) is a smooth bivariate function (tensor-product spline with a Gaussian-process or P-spline prior). This recovers a time-varying response curve — exactly the chill-then-force pattern, plus supra-optimal damage, with no parametric form imposed. Implementable via brms with s(lag, temp, by=channel) or in NumPyro with GP priors.
+
+(b) Signed double-window decomposition:
+
+Split each channel into "chilling-relevant" and "forcing-relevant" transformed series — e.g., a Gaussian bump g
+c
+​
+ (T) around 7 °C and a sigmoid g
+f
+​
+ (T) — then put a linear functional coefficient on each. You lose some flexibility but gain process interpretability and identifiability under your sample size.
+
+4. Basis & prior choices that matter for n ≈ 1000
+Choice	Recommendation	Why
+Basis for β
+k
+​
+ (t,u)	Tensor-product P-splines (15×15 knots) or low-rank GP	Smoothness regularises strongly; needed at this n
+Prior on spline coefficients	Hierarchical Gaussian with horseshoe on group-level SDs	Lets irrelevant lag windows shrink to zero
+Cultivar effects	Partial pooling, α
+c
+​
+ ∼N(μ,τ
+2
+ ), τ∼ half-Normal	Stabilises rare cultivars
+Latent cultivar (DUN ambiguous)	Mixture over p(c∣lon,lat)	Marginalises uncertainty
+Likelihood	Discrete-time hazard (Bernoulli per day) or log-Normal AFT on DOY	Discrete-time is easier; AFT is faster
+Site effect	Spatial Gaussian process on (lon, lat, alt) for α
+i
+​
+ 	Captures microclimate not in ERA5
+5. Three viable software paths
+6. Critical pitfalls specific to your setup
+Variable-domain functional data. Each curve has a different end (the event itself). Use refund::lf.vd or, in a hazard formulation, this is automatic — the curve simply extends day-by-day. Do not zero-pad or truncate to a common length; you'll bias β(t).
+Right-censoring. Some site-years won't have observed every stage. The hazard formulation handles this natively; AFT needs a censoring indicator. Don't drop censored rows.
+Identifiability of chill vs forcing windows. Catalan winters and springs are correlated — cold winters often precede cool springs. Without informative priors on the sign of β
+k
+​
+ (t,u) in known windows, the model can flip them. Use weakly informative priors: β
+T
+​
+ (u) centered at 0 but with a slight negative prior mean in Nov–Jan and positive in Mar–Apr.
+Sample size vs surface dimension. A full T×U surface with 5 channels can have thousands of effective parameters. Either (i) reduce via FPCA on each weather channel first and regress on the scores (Bayesian FPCR — Goldsmith & Kitago 2016), or (ii) use rank-≤10 tensor decomposition of β
+k
+​
+ (t,u).
+Spatial leakage. ERA5-Land cells are 9 km; nearby PEP725 sites share weather. Use spatial block CV, not random CV — otherwise you'll overstate accuracy.
+Alternancy / biennial bearing. Add prior-year flowering DOY (or a latent "on/off" state) as a scalar covariate; otherwise the functional terms will absorb this and look noisier than they are.
+7. How to report it against the GDD baseline
+Fit four models and put them in one table:
+
+Model	Captures chill?	Nonlinear in T?	Cultivar pooling?	Uncertainty?
+GDD (T
+b
+​
+ =10)	✗	✗	✗	✗
+Chill–Force (PhenoFlex)	✓	✓ (parametric)	✓	partial
+Bayesian FLM (linear β(t,u))	✓ (learned)	✗	✓	✓ full posterior
+Bayesian FGAM (this plan)	✓ (learned)	✓ (learned)	✓	✓ full posterior
+Score with RMSE, MAE, CRPS, and coverage of 80/95% predictive intervals under leave-one-year-out and spatial-block CV. The functional models should win on CRPS even if RMSE is close — that's the real Bayesian payoff for downstream decision-making (irrigation, frost protection scheduling).
+
+8. Bottom-line recommendation
+Yes — go with a Bayesian functional hazard / FGAM with:
+
+discrete-time hazard likelihood,
+tensor-product P-spline (or GP) priors on β
+k
+​
+ (t,u) per weather channel,
+nonlinear FGAM term for T
+max
+​
+  to capture supra-optimal damage,
+cultivar random intercepts with the DUN-derived prior,
+spatial GP on (lon, lat, alt) for residual microclimate,
+variable-domain handling, weakly informative sign priors on chill/force windows, FPCA pre-reduction if NUTS is slow.
+This generalises GDD, generalises chill–force, gives you calibrated uncertainty, and is defensible in a phenology journal (the Gellar/Goldsmith/Scheipl functional-regression literature is well-established and increasingly used in eco-climatology).
+
+Want me to write the actual brms formula or a NumPyro skeleton for the discrete-time functional hazard model next?
+
+
+
+
+
+
+
+
+
+
+4 minutes ago
+Favicon for x-ai
+Grok 4.20
+Reasoning
+Searched for Bayesian functional regression phenology olive OR plant flowering prediction
+5 results
+Searched for Bayesian hierarchical model functional data analysis PEP725 OR plant phenology time series
+5 results
+Yes, Bayesian functional regression treated as a time series (or functional time series) is a strong, modern approach for your olive phenology data. It can outperform simple GDD and even the basic hybrid chilling-forcing + XGBoost I suggested earlier, especially for capturing the full trajectory of daily weather influences, non-linear time-varying effects, cultivar/site heterogeneity, and uncertainty quantification.
+
+Why This Fits Your Data Well
+Your ~1000 PEP725 records (2013–2021, BBCH stages like 60/65 for flowering, irregular observation dates, linked to daily weather, cultivars via DUN/lat-lon, spatial covariates) are naturally suited to this:
+
+Weather up to each observation is a multivariate time series or functional predictor X
+i
+​
+ (t) (temperature, VPD, precipitation, extremes as smooth functions of day-of-year or days-since-Nov-1).
+Response can be: (a) DOY of key stage (scalar-on-function regression), (b) observed BBCH stage on a visit date (ordinal/continuous development), or (c) latent continuous phenological progress.
+Bayesian hierarchical structure lets you share strength across cultivars, sites, and years while including spatial effects (lon/lat/alt) and priors informed by olive physiology (e.g., chilling windows, temperature response curves).
+This directly addresses GDD weaknesses (linear accumulation, ignores chilling, no cultivar × weather interactions, no uncertainty) in a flexible, non-parametric way. Recent work (2020–2025) shows Bayesian hierarchical space-time models and functional approaches achieving high accuracy on daily phenological development (R
+2
+  ~0.7–0.9, low RMSE in days) for both satellite and ground data, including olive-specific Bayesian neural networks.
+
+Promising Model Formulations
+Here are two practical ways to implement your idea:
+
+Scalar-on-Function Bayesian Regression (Core Functional Regression)
+Model the DOY (or transformed stage) of BBCH 60/65 as:
+
+Y
+i
+​
+ =α+∫β(t)X
+i
+​
+ (t)dt+Z
+i
+​
+ γ+u
+c(i)
+​
+ +v
+s(i)
+​
+ +ϵ
+i
+​
+
+X
+i
+​
+ (t): smoothed daily weather functions (temperature curve, cumulative chill proxy, VPD, etc.) from a fixed start date (e.g., previous Nov 1) to the observation.
+β(t): smooth coefficient function estimated with basis expansion (B-splines, Fourier, or Gaussian processes). Its shape reveals when weather matters most (e.g., strong negative weights in winter for warm days = de-chilling).
+Hierarchical random effects for cultivar (u
+c
+​
+ ) and site (v
+s
+​
+ ), possibly with spatial GP on lat/lon.
+Bayesian priors on basis coefficients, smoothing penalties, and physiological parameters.
+This is “functional data analysis” (FDA) in a Bayesian framework. Packages handle the basis reduction automatically.
+
+Bayesian Hierarchical Space-Time / Continuous Development Model (Strong Time-Series Flavor)
+Treat each site-year as a time series and model daily latent phenological progress (or greenness analog, even without satellite data) with a state-space or double-logistic form driven by daily weather. Observations are interval-censored or ordinal (you only see the stage on visit dates).
+
+Adapt models like BHST-LSP or Bayesian double-logistic MCMC: latent development rate each day is a non-linear function of current temperature + cumulative chilling + extremes. Use MCMC (Stan, PyMC, or INLA) for full posterior over parameters, flowering dates, and uncertainty. Add cultivar- and site-specific hierarchies.
+
+You can embed your process-based chilling/forcing accumulations as additional scalar predictors or let the functional terms discover them.
+
+Both allow prediction of future stages given current-year weather trajectories and produce full posterior distributions (e.g., “80% chance of full flowering by DOY 135”).
+
+Pros and Cons vs. Previous Hybrid Plan
+Advantages:
+
+Captures the entire weather history and important windows non-parametrically (better than fixed chilling + GDD formulas).
+Excellent uncertainty quantification — critical for agricultural decision support in variable Mediterranean climate.
+Hierarchical Bayesian setup naturally handles your spatial/cultivar structure and borrowing strength across the ~1000 records.
+Can integrate priors from olive literature (e.g., optimal chilling ~8–12°C, forcing base ~6°C).
+Directly treats the problem as time series/functional data, which matches your suggestion.
+Challenges:
+
+Steeper implementation curve than XGBoost (requires MCMC diagnostics, basis choice, computational resources).
+Interpretability is high for β(t) curves but requires expertise.
+PEP725 observations are irregular/not daily, so you’ll need to handle censoring or aggregate appropriately.
+Risk of overfitting with only 8–9 years; strong regularization and cross-validation (temporal/spatial) are essential.
+Overall verdict: This is better than pure GDD and complementary to the hybrid approach. Best practical path: Start with Bayesian calibration of the CAC_GDD-style process model (easy Bayesian entry point), then expand to full functional regression. Or go straight to a Bayesian functional model that includes the process outputs as covariates.
+
+Recommended Implementation Plan
+Data Preparation (use the pep725 R package — it’s designed exactly for your dataset)
+
+Convert to functional objects: smooth daily weather series per site-year using B-splines or functional principal components (fda or fdapace packages).
+Engineer scalars: cultivar group (early/mid-late from DUN/lat-lon), accumulated chilling proxies, extremes counts, photoperiod, spatial covariates, previous-year fruit-load proxy if possible.
+Handle irregularity: align series to common time grid (e.g., DOY 300 previous year to DOY 180).
+Start Simple → Scale Up
+
+Frequentist baseline: refund or mgcv with functional terms (af or tensor product splines on lagged weather).
+Bayesian version:
+R: brms (with spline basis for functional predictors) + INLA for fast spatio-temporal fitting, or full rstan/cmdstanr.
+Python: PyMC/NumPyro for custom Gaussian process or basis-expansion models.
+For olive-specific Bayesian NN flavor: Probabilistic Bayesian Neural Networks (variational inference or Monte Carlo dropout) — recent work shows strong results for phenology prediction with uncertainty.
+Incorporate physiology: put informative priors on key windows or use the optimized chilling/forcing accumulations from my previous suggestion as extra features.
+Validation
+
+Temporal forward chaining (train on 2013–2018, test 2019–2021).
+Spatial leave-one-region-out (coastal vs. inland Catalonia).
+Metrics: RMSE/MAE in days for DOY predictions, coverage of posterior intervals, posterior predictive checks.
+Compare explicitly to GDD, optimized CAC_GDD, and XGBoost hybrid.
+Extensions
+
+Add spatial SPDE autocorrelation (INLA) for lat/lon effects.
+Forecast mode: sample future weather trajectories and propagate through the posterior.
+Climate change projections: drive with downscaled scenarios for Catalonia.
+Key References (from recent literature)
+Montesinos-López et al. on Bayesian functional regression for phenotypic curves (GFR/BGLR package in R).
+Bayesian hierarchical space-time models for daily phenological development (BHST-LSP style).
+Probabilistic Bayesian Neural Networks specifically for olive phenology prediction.
+Papers on Bayesian double-logistic fitting to time series for phenological parameter estimation with uncertainty.
+Italian olive phenology modeling work (thermal time + hierarchical validation, easily Bayesian-extended).
+This approach is cutting-edge, publishable, and actionable with your data volume. It leverages the time-series nature beautifully while remaining grounded in olive biology.
+
+If you share more details (preferred language R/Python, exact phase_ids you care about most, number of unique cultivars/sites, or weather data format), I can provide a concrete code skeleton, Stan model outline, or specific package recommendations. Would you like to start with a Bayesian version of the chilling-forcing model first, or jump straight into the functional regression formulation?
+
+
+
+10 citations
+
+Favicon for https://plantmethods.biomedcentral.com/article/10.1186/s13007-018-0314-7
+
+Favicon for https://link.springer.com/article/10.1007/s00484-014-0876-7?error=cookies_not_supported&code=d1a48f35-204f-407a-9034-d3dc9131a22d
+
+Favicon for https://www.vicomtech.org/en/rdi-tangible/publications/publication/probabilistic-bayesian-neural-networks-for-olive-phenology-prediction-in-precision-agriculture
+
+Favicon for https://pmc.ncbi.nlm.nih.gov/articles/PMC8230019/
+
+Favicon for https://hal.science/hal-04186332/file/inglada-2022-bayes-model.pdf
+
+Favicon for https://link.springer.com/article/10.1007/s13253-025-00718-1
+
+Favicon for https://www.sciencedirect.com/science/article/abs/pii/S0034425720303266
+
+Favicon for https://link.springer.com/article/10.1007/s00484-007-0113-8?error=cookies_not_supported&code=fa79b4fb-cfec-4789-bcf5-24a11fb64368
+
+Favicon for https://github.com/matthias-da/pep725
+
+Favicon for https://link.springer.com/article/10.1007/s42452-020-03847-z?error=cookies_not_supported&code=d901881a-46fa-4e8f-9c12-80ff3f73a946
+Bayesian functional regression as an alternative statistical analysis of high-throughput phenotyping data of modern agriculture | Plant Methods | Springer Nature Link
+https://plantmethods.biomedcentral.com/article/10.1186/s13007-018-0314-7
+Favicon for https://plantmethods.biomedcentral.com/article/10.1186/s13007-018-0314-7
+plantmethods.biomedcentral.com
+Phenological models to predict the main flowering phases of olive ( Olea europaea L.) along a latitudinal and longitudinal gradient across the Mediterranean region
+https://link.springer.com/article/10.1007/s00484-014-0876-7?error=cookies_not_supported&code=d1a48f35-204f-407a-9034-d3dc9131a22d
+Favicon for https://link.springer.com/article/10.1007/s00484-014-0876-7?error=cookies_not_supported&code=d1a48f35-204f-407a-9034-d3dc9131a22d
+link.springer.com
+Probabilistic Bayesian Neural Networks for olive phenology prediction in precision agriculture
+https://www.vicomtech.org/en/rdi-tangible/publications/publication/probabilistic-bayesian-neural-networks-for-olive-phenology-prediction-in-precision-agriculture
+Favicon for https://www.vicomtech.org/en/rdi-tangible/publications/publication/probabilistic-bayesian-neural-networks-for-olive-phenology-prediction-in-precision-agriculture
+www.vicomtech.org
+A Phenological Model for Olive ( Olea europaea L. var europaea ) Growing in Italy
+https://pmc.ncbi.nlm.nih.gov/articles/PMC8230019/
+Favicon for https://pmc.ncbi.nlm.nih.gov/articles/PMC8230019/
+pmc.ncbi.nlm.nih.gov
+https://hal.science/hal-04186332/file/inglada-2022-bayes-model.pdf
+https://hal.science/hal-04186332/file/inglada-2022-bayes-model.pdf
+Favicon for https://hal.science/hal-04186332/file/inglada-2022-bayes-model.pdf
+hal.science
+Spatiotemporal Analysis of Land Surface Plant Phenology | Journal of Agricultural, Biological and Environmental Statistics | Springer Nature Link
+https://link.springer.com/article/10.1007/s13253-025-00718-1
+Favicon for https://link.springer.com/article/10.1007/s13253-025-00718-1
+link.springer.com
+Understanding the continuous phenological development at daily time step with a Bayesian hierarchical space-time model: impacts of climate change and extreme weather events
+https://www.sciencedirect.com/science/article/abs/pii/S0034425720303266
+Favicon for https://www.sciencedirect.com/science/article/abs/pii/S0034425720303266
+www.sciencedirect.com
+Bayesian analysis of the species-specific lengthening of the growing season in two European countries and the influence of an insect pest
+https://link.springer.com/article/10.1007/s00484-007-0113-8?error=cookies_not_supported&code=fa79b4fb-cfec-4789-bcf5-24a11fb64368
+Favicon for https://link.springer.com/article/10.1007/s00484-007-0113-8?error=cookies_not_supported&code=fa79b4fb-cfec-4789-bcf5-24a11fb64368
+link.springer.com
+matthias-da/pep725
+https://github.com/matthias-da/pep725
+Favicon for https://github.com/matthias-da/pep725
+github.com
+A hierarchical threshold modeling approach for understanding phenological responses to climate change: when did North American lilacs start to bloom earlier?
+https://link.springer.com/article/10.1007/s42452-020-03847-z?error=cookies_not_supported&code=d901881a-46fa-4e8f-9c12-80ff3f73a946
+Favicon for https://link.springer.com/article/10.1007/s42452-020-03847-z?error=cookies_not_supported&code=d901881a-46fa-4e8f-9c12-80ff3f73a946
+link.springer.com
+Previous slideNext slide
+
+
+
+
+
+
+
+4 minutes ago
+Favicon for openai
+GPT-5.5
+Reasoning
+Yes — Bayesian functional regression is a very good fit, especially if you want something more biologically meaningful than GDD while still using the full daily weather history.
+
+But I would frame it as:
+
+Bayesian functional ordinal time-series regression with cultivar/site hierarchical effects
+
+rather than just “Bayesian functional regression.”
+
+That matters because your outcome is not a continuous scalar like yield. It is an ordered phenological stage observed irregularly through time.
+
+Why Bayesian functional regression makes sense here
+GDD compresses the entire weather history into one number:
+
+GDD
+t
+​
+ =
+τ=t
+0
+​
+
+∑
+t
+​
+ max(0,T
+τ
+​
+ −T
+base
+​
+ )
+That assumes:
+
+temperature effect is linear above a base threshold,
+only heat matters,
+all previous days contribute equally once accumulated,
+drought, chill, VPD, radiation, rain, and cultivar do not alter the response,
+phenology has no uncertainty except residual error.
+A Bayesian functional model lets the data learn which parts of the weather history matter most.
+
+For example, instead of using one GDD value, you model phenological stage as a function of the entire weather trajectory before observation date t:
+
+S
+i,t
+​
+ ∼f(T
+i,t−1
+​
+ ,T
+i,t−2
+​
+ ,…,T
+i,t−L
+​
+ ,P
+i,t−1
+​
+ ,P
+i,t−2
+​
+ ,…,P
+i,t−L
+​
+ ,VPD
+i,t−1
+​
+ ,…)
+where L might be 90, 180, or 240 days.
+
+The key advantage is that the model can learn, for example:
+
+winter temperatures 120–180 days before flowering matter for chill,
+spring temperatures 10–40 days before observation matter for forcing,
+water deficit 20–60 days earlier delays or modifies stage progression,
+extreme heat near flowering has different effects than mild warmth in March.
+Recommended formulation
+1. Treat weather histories as functional predictors
+For each observation i on day t, define lagged weather curves:
+
+T
+i
+​
+ (u)=temperature at lag u
+P
+i
+​
+ (u)=precipitation at lag u
+V
+i
+​
+ (u)=VPD at lag u
+where u=1,2,…,L days before the observation.
+
+Then use a functional linear predictor:
+
+η
+i,t
+​
+ =α+∫
+0
+L
+​
+ β
+T
+​
+ (u)T
+i
+​
+ (u)du+∫
+0
+L
+​
+ β
+P
+​
+ (u)P
+i
+​
+ (u)du+∫
+0
+L
+​
+ β
+V
+​
+ (u)V
+i
+​
+ (u)du+b
+cultivar[i]
+​
+ +b
+site[i]
+​
+ +b
+year[i]
+​
+
+In discrete daily data this becomes:
+
+η
+i,t
+​
+ =α+
+u=1
+∑
+L
+​
+ β
+T
+​
+ (u)T
+i,t−u
+​
+ +
+u=1
+∑
+L
+​
+ β
+P
+​
+ (u)P
+i,t−u
+​
+ +
+u=1
+∑
+L
+​
+ β
+V
+​
+ (u)VPD
+i,t−u
+​
+ +b
+cultivar[i]
+​
+ +b
+site[i]
+​
+ +b
+year[i]
+​
+
+The functions β
+T
+​
+ (u), β
+P
+​
+ (u), and β
+V
+​
+ (u) tell you when each weather variable matters.
+
+For example, β
+T
+​
+ (u) may peak around 20–40 days before flowering, while β
+P
+​
+ (u) may matter over a broader 30–90 day lag window.
+
+2. Use an ordinal likelihood for phenological stage
+Because phase_id is ordered, do not use ordinary Gaussian regression unless you convert the problem to transition dates.
+
+A good likelihood is an ordinal cumulative logit model:
+
+P(S
+i,t
+​
+ ≤k)=logit
+−1
+ (θ
+k
+​
+ −η
+i,t
+​
+ )
+where:
+
+S
+i,t
+​
+  is observed phenological stage,
+k indexes ordered stages,
+θ
+k
+​
+  are ordered cutpoints,
+η
+i,t
+​
+  is the functional weather-driven phenological development score.
+Then:
+
+P(S
+i,t
+​
+ =k)=P(S
+i,t
+​
+ ≤k)−P(S
+i,t
+​
+ ≤k−1)
+This gives you a probabilistic prediction over stages, not just a point estimate.
+
+3. Add time-series structure
+Yes, you can and probably should treat it as a time series, but with one caveat:
+
+Your observations are likely sparse and irregular, so this is not a standard dense time series. It is better treated as a partially observed latent phenological state process.
+
+Define a latent development index z
+i,t
+​
+  for site-year i on day t:
+
+z
+i,t
+​
+ =z
+i,t−1
+​
+ +r
+i,t
+​
+ +ϵ
+i,t
+​
+
+where r
+i,t
+​
+  is the daily phenological development rate.
+
+Then model the rate using functional or weather-history terms:
+
+r
+i,t
+​
+ =g(T
+i,t
+​
+ ,P
+i,t
+​
+ ,VPD
+i,t
+​
+ ,R
+i,t
+​
+ ,photoperiod
+i,t
+​
+ )
+or more flexibly:
+
+r
+i,t
+​
+ =α+
+u=0
+∑
+L
+​
+ β
+T
+​
+ (u)T
+i,t−u
+​
+ +
+u=0
+∑
+L
+​
+ β
+P
+​
+ (u)P
+i,t−u
+​
+ +
+u=0
+∑
+L
+​
+ β
+V
+​
+ (u)VPD
+i,t−u
+​
+ +b
+cultivar[i]
+​
+ +b
+site[i]
+​
+ +b
+year[i]
+​
+
+Observed phenological stage is then linked to the latent index:
+
+S
+i,t
+​
+ =kifθ
+k−1
+​
+ <z
+i,t
+​
+ ≤θ
+k
+​
+
+This is very natural biologically:
+
+weather drives daily development rate,
+development accumulates through time,
+phenological stages are thresholds on latent development,
+cultivar and site shift the rate or thresholds.
+Best model architecture for your case
+I would use this hierarchy:
+
+S
+i,t
+​
+ ∼OrderedLogit(z
+i,t
+​
+ ,θ)
+z
+i,t
+​
+ =z
+i,t−1
+​
+ +r
+i,t
+​
+
+r
+i,t
+​
+ =α+f
+T
+​
+ (T
+i,t
+​
+ )+f
+P
+​
+ (P
+i,t
+​
+ )+f
+V
+​
+ (VPD
+i,t
+​
+ )+f
+R
+​
+ (Rad
+i,t
+​
+ )+f
+D
+​
+ (photoperiod
+i,t
+​
+ )+b
+cultivar[i]
+​
+ +b
+site[i]
+​
+ +b
+year[i]
+​
+ +ϵ
+i,t
+​
+
+But if you specifically want functional regression, use lag kernels:
+
+r
+i,t
+​
+ =α+
+u=0
+∑
+L
+​
+ β
+T
+​
+ (u)T
+i,t−u
+​
+ +
+u=0
+∑
+L
+​
+ β
+P
+​
+ (u)P
+i,t−u
+​
+ +
+u=0
+∑
+L
+​
+ β
+V
+​
+ (u)VPD
+i,t−u
+​
+ +
+u=0
+∑
+L
+​
+ β
+R
+​
+ (u)Rad
+i,t−u
+​
+ +b
+cultivar[i]
+​
+ +b
+site[i]
+​
+ +b
+year[i]
+​
+
+with smooth priors on the lag functions:
+
+β
+T
+​
+ (u)∼smooth Gaussian process or spline prior
+This gives you interpretable lag-response curves.
+
+Why this is better than GDD
+The model can learn curves like this:
+
+Lag period	Possible biological meaning
+150–240 days before observation	winter chilling and dormancy conditions
+60–120 days before observation	pre-season moisture and temperature effects
+20–60 days before observation	spring forcing
+0–20 days before observation	short-term stress, heat, VPD, rainfall effects
+Instead of assuming every warm day contributes linearly forever, the Bayesian functional model learns:
+
+effect of weather=
+u=1
+∑
+L
+​
+ β(u)X
+t−u
+​
+
+where β(u) can be positive, negative, near-zero, or stage-specific.
+
+Stage-specific functional effects
+A further improvement is to let each phenological transition have its own weather sensitivity.
+
+For transition into stage k:
+
+η
+i,k,t
+​
+ =α
+k
+​
+ +
+u=1
+∑
+L
+​
+ β
+T,k
+​
+ (u)T
+i,t−u
+​
+ +
+u=1
+∑
+L
+​
+ β
+P,k
+​
+ (u)P
+i,t−u
+​
+ +
+u=1
+∑
+L
+​
+ β
+V,k
+​
+ (u)VPD
+i,t−u
+​
+ +b
+cultivar[i],k
+​
+ +b
+site[i],k
+​
+
+This is biologically appealing because flowering, fruit set, and ripening may respond to different drivers.
+
+However, with only about 1,000 records, I would start with shared functional effects and maybe add stage-specific deviations only if you have enough data.
+
+Important caveat: 1,000 records is modest
+Bayesian functional time-series models can get parameter-heavy quickly.
+
+So avoid a fully unconstrained model like:
+
+β
+T
+​
+ (1),β
+T
+​
+ (2),…,β
+T
+​
+ (240)
+with independent parameters.
+
+Instead, use dimension reduction.
+
+Good options:
+
+Option A: spline basis for lag effects
+Represent the lag function as:
+
+β
+T
+​
+ (u)=
+m=1
+∑
+M
+​
+ γ
+T,m
+​
+ B
+m
+​
+ (u)
+where B
+m
+​
+ (u) are spline basis functions and M is small, for example 6 to 12.
+
+Then:
+
+u=1
+∑
+L
+​
+ β
+T
+​
+ (u)T
+i,t−u
+​
+ =
+m=1
+∑
+M
+​
+ γ
+T,m
+​
+ [
+u=1
+∑
+L
+​
+ B
+m
+​
+ (u)T
+i,t−u
+​
+ ]
+This converts the weather history into a few learned functional summaries.
+
+Option B: Gaussian process prior over lag kernels
+Use a smooth GP prior:
+
+β
+T
+​
+ (u)∼GP(0,K(u,u
+′
+ ))
+This is flexible but can be computationally heavier.
+
+Option C: pre-defined biological windows
+For a first practical model, use windows:
+
+0–14 days,
+15–30 days,
+31–60 days,
+61–90 days,
+91–150 days,
+151–240 days.
+Then let the Bayesian model estimate the effect of each window.
+
+This is less elegant than full functional regression but much more stable with 1,000 observations.
+
+Recommended practical model
+Given your data size, I would use a Bayesian distributed lag ordinal model.
+
+Model
+For observation j at site-year i and date t:
+
+S
+j
+​
+ ∼OrderedLogit(η
+j
+​
+ ,θ)
+η
+j
+​
+ =α+
+m=1
+∑
+M
+​
+ γ
+T,m
+​
+ T
+j,m
+∗
+​
+ +
+m=1
+∑
+M
+​
+ γ
+P,m
+​
+ P
+j,m
+∗
+​
+ +
+m=1
+∑
+M
+​
+ γ
+V,m
+​
+ VPD
+j,m
+∗
+​
+ +γ
+D
+​
+ photoperiod
+j
+​
+ +b
+cultivar[j]
+​
+ +b
+site[j]
+​
+ +b
+year[j]
+​
+
+where T
+j,m
+∗
+​
+ , P
+j,m
+∗
+​
+ , and VPD
+j,m
+∗
+​
+  are spline-projected lagged weather histories.
+
+For example:
+
+T
+j,m
+∗
+​
+ =
+u=1
+∑
+L
+​
+ B
+m
+​
+ (u)T
+j,t−u
+​
+
+This is functional regression, but compressed into a stable form.
+
+What I would not do first
+I would not start with a full latent state-space model unless you have repeated stage observations per site-year.
+
+If most of your PEP725 records are isolated observations, a full model like:
+
+z
+i,t
+​
+ =z
+i,t−1
+​
+ +r
+i,t
+​
+
+may be difficult to identify.
+
+Start with:
+
+Bayesian functional ordinal regression on observed stages.
+Then extend to a latent time-series/state-space model if you have dense repeated observations.
+Suggested progression
+Phase 1: Bayesian functional ordinal regression
+Use each observed record as one training case.
+
+Predict phase_id from lagged weather curves, cultivar, site, and year.
+
+This is easiest and likely useful immediately.
+
+Phase 2: Add monotonic time structure
+If you have multiple observations per site-year, enforce that latent phenology increases over time:
+
+z
+i,t+1
+​
+ ≥z
+i,t
+​
+
+or:
+
+r
+i,t
+​
+ ≥0
+This prevents biologically impossible backward predictions.
+
+Phase 3: Transition-date model
+Estimate the dates when each stage threshold is crossed.
+
+This lets you produce outputs like:
+
+
+Predicted BBCH 60 date: 2021-05-04
+80% credible interval: 2021-04-29 to 2021-05-09
+Minimum feature set
+For each observation date, extract lagged daily curves for the previous 180 or 240 days:
+
+Functional predictor	Lag range
+Mean temperature	0–240 days
+Minimum temperature	0–240 days
+Maximum temperature	0–240 days
+Precipitation	0–180 days
+VPD	0–120 days
+Radiation	0–120 days
+Reference ET	0–120 days
+Also include static predictors:
+
+Predictor	Purpose
+Cultivar	genetic timing differences
+Latitude	photoperiod and climate gradient
+Longitude	coastal/interior gradient
+Elevation	temperature and exposure
+Year random effect	annual unmeasured conditions
+Site random effect	microclimate and management
+Validation
+Use blocked validation, not random row splits.
+
+Recommended:
+
+Leave-one-year-out
+
+tests prediction for new seasons.
+Leave-one-site-out
+
+tests spatial transfer.
+Leave-one-cultivar-out, if enough cultivars exist
+
+tests cultivar generalization.
+Compare against:
+
+day-of-year baseline,
+GDD baseline,
+cultivar-specific GDD,
+chill plus GDD,
+your Bayesian functional model.
+Bottom line
+Yes, Bayesian functional regression is a strong choice. I would use it like this:
+
+Model phenological stage with an ordinal Bayesian functional distributed-lag model, where lagged curves of temperature, rainfall, VPD, radiation, and ET drive a latent phenological development score, with hierarchical effects for cultivar, site, and year.
+
+If your observations are dense enough by site-year, extend it into a Bayesian latent state-space time-series model where daily development accumulates and stages are threshold crossings.
+
+The most practical first version is:
+
+S
+j
+​
+ ∼OrderedLogit(η
+j
+​
+ ,θ)
+η
+j
+​
+ =α+∫
+0
+L
+​
+ β
+T
+​
+ (u)T
+j
+​
+ (u)du+∫
+0
+L
+​
+ β
+P
+​
+ (u)P
+j
+​
+ (u)du+∫
+0
+L
+​
+ β
+VPD
+​
+ (u)VPD
+j
+​
+ (u)du+b
+cultivar[j]
+​
+ +b
+site[j]
+​
+ +b
+year[j]
+​
+
+with smooth spline or Gaussian-process priors on the lag functions β(u).
+
+That would be a much richer and more defensible alternative to GDD.
+
+
+
+
+
+
+
+
+
+
+Yeah GDD is a very basic model. I can also get pep725 olive data too which should help?
+
+
+
+
+
+
+
+
+
+2 minutes ago
+Favicon for anthropic
+Claude Opus 4.7
+Yes — Pulling the Full PEP725 Olive Dataset Is a Major Upgrade
+Going from ~1000 Catalan records to the full European olive corpus is probably the single highest-leverage change you can make. It transforms what's statistically identifiable, but it also introduces real hazards. Here's what changes and how to handle it.
+
+1. What you actually gain
+The full PEP725 olive holdings span roughly Portugal → Spain → southern France → Italy → Slovenia/Croatia → Greece → Cyprus, with records back to ~1950 in places. Realistic expectations:
+
+Aspect	Catalonia only	Full PEP725 olive
+Sample size	~1000	~10–50k observations
+Climate gradient (winter chill)	~200–800 CU	~50–1500+ CU
+Forcing gradient (spring GTU)	moderate	very wide
+Cultivar diversity	~5–8 dominant	50+ named, many "unknown"
+Years	2013–2021	1950s–present (sparse pre-1990)
+Latitude range	40.5–42.5°N	~34–46°N
+The big win: identifiability of the chilling response. With Catalonia alone, almost every site-year accumulates "enough" chill, so the chill requirement C
+R
+​
+  is poorly constrained — the data only see the forcing side. Add Andalusia, Crete, Cyprus, and southern Italy, and you finally observe chill-limited site-years where mild winters delay or fail flowering. That's what lets you estimate the full chill→force response surface, not just its right half.
+
+2. What changes in the model — concretely
+(a) The functional coefficient surface becomes estimable
+Recall β
+k
+​
+ (t,u) in the Bayesian FGAM. With Catalonia only, the Nov–Jan portion (chilling window) is nearly flat in the data — your posterior would just return the prior. With pan-Mediterranean data, you'll get sharp, data-driven estimates of where chilling matters and where it saturates. This is the difference between a publishable methods paper and a regional case study.
+
+(b) Hierarchy gets deeper
+Move from a 2-level to a 4-level hierarchy:
+
+
+observation
+  └─ site-year
+       └─ site (lon, lat, alt)
+            └─ bioclimatic region   ← NEW (e.g., Köppen Csa/Csb/BSk)
+                 └─ cultivar
+                      └─ population (cultivar-region interaction)  ← NEW
+Partial pooling across regions stabilises rare cultivars and prevents one country's recording bias from dominating.
+
+(c) Cultivar attribution gets harder, not easier
+DUN solves cultivar in Catalonia. Outside Catalonia you have no equivalent registry except patchy ones (Italy's SIAN, Spain's SIGPAC for some regions, Portugal's iDigital). For the rest:
+
+Treat cultivar as fully latent with a region-conditional prior p(c∣country, NUTS-3) derived from FAO/IOC cultivar census tables.
+Or marginalise cultivar entirely outside Catalonia and let cultivar enter only as a random intercept indexed by (country × NUTS-3) — coarser but honest.
+Or use a "known/unknown" cultivar indicator and let the model learn separate variance components.
+(d) Photoperiod becomes a real signal
+Across 34–46°N, day length on April 1 ranges from ~12.4 h to ~13.0 h. Within Catalonia this variation is negligible; pan-Mediterranean it's identifiable. Add photoperiod as a functional covariate or as a multiplicative modifier on the forcing accumulator.
+
+3. Data-quality landmines in PEP725 you must address
+4. Weather-data implications
+If you scale from Catalonia to all of Mediterranean Europe:
+
+ERA5-Land (9 km, hourly) remains the right backbone — uniform across countries, no station-network politics.
+Bias-correct against national networks where available (AEMET, Meteocat, MeteoFrance SAFRAN, ARPA in Italy, HNMS in Greece). Don't just trust ERA5-Land in complex terrain (Apennines, Sierra Nevada, Crete).
+Use lapse-rate correction to site alt consistently — at this scale it matters a lot more than within Catalonia.
+Pre-compute and cache: T
+min
+​
+ ,T
+max
+​
+ ,T
+mean
+​
+ ,VPD,P,R
+s
+​
+ ,SPEI-3,photoperiod, plus chill-portions (Dynamic Model) — for every (site, day, year) once.
+5. Validation strategy must change
+With pan-European data, random CV becomes deeply misleading. Use a stack:
+
+CV scheme	What it tests
+Leave-one-year-out	Temporal transferability (climate-change relevance)
+Leave-one-country-out	Cross-network generalisation, observer-bias robustness
+Leave-one-bioclimatic-zone-out	Mechanistic generalisation (the killer test)
+Spatial block (~50 km)	Microclimate transferability
+Leave-one-cultivar-out	Cultivar-effect identifiability
+Headline result for the paper: model performance under leave-one-bioclimatic-zone-out, because that simulates "predict phenology in a future climate where current Catalonia behaves like current Andalusia."
+
+6. Two strategic options for using the broader data
+Option 1 (recommended): Fit globally, predict locally
+Train one Bayesian FGAM on all PEP725 olive data with the deep hierarchy in §2(b). Catalonia is a leaf; its predictions borrow strength from Andalusia (chill-limited regime) and southern France (forcing-limited regime). Best statistical efficiency, best generalisation.
+
+Option 2: Transfer learning / two-stage
+Fit the chill–force surface β
+k
+​
+ (t,u) on the full European dataset → freeze it → refit cultivar and site effects on Catalonia + DUN cultivars. Useful if the Catalan operational deployment requires fast retraining or DUN-specific cultivar resolution at high fidelity.
+
+I'd start with Option 1 and only fall back to Option 2 if computational cost forces it.
+
+7. Updated build order
+Pull full PEP725 olive (Olea europaea, all phase_ids, all years).
+Run the QC checklist (§3). Expect to drop 5–15% of rows.
+Build region/cultivar prior tables from FAO/IOC + DUN + SIGPAC + SIAN.
+Pull ERA5-Land for all unique (lon, lat) at daily resolution from Sep y−1 to Jul y.
+Compute classical GDD baseline + PhenoFlex baseline on the full corpus — these are your benchmarks.
+Fit Bayesian FGAM with the 4-level hierarchy and the variable-domain hazard likelihood from the previous turn.
+Evaluate under all five CV schemes; report CRPS as the headline.
+Optionally: fit a Catalonia-specific refinement using DUN cultivar truth.
+8. One caveat worth stating plainly
+More data ≠ automatic accuracy gain for Catalonia specifically. Pan-European training will likely:
+
+Improve uncertainty calibration and out-of-distribution behaviour (warm winters, drought years).
+Improve cultivar effects for varieties shared with other regions (Arbequina is grown widely; Frantoio comparisons help).
+Possibly worsen raw RMSE on Catalan validation folds, because the model now has to fit Cyprus too.
+The right framing in the paper: pan-European training is what makes the model mechanistically valid and climate-transferable, not necessarily what minimises 2013–2021 Catalan RMSE. If a reviewer asks "why not just fit Catalonia?", the answer is identifiability of the chilling response.
+
+Want me to draft the actual PEP725 bulk-download + QC pipeline, or jump straight to the NumPyro/brms code for the hierarchical functional hazard model?
+
+
+
+
+
+
+
+
+
+
+42 seconds ago
+Favicon for x-ai
+Grok 4.20
+Reasoning
+Searched for PEP725 olive Olea europaea phenology data availability 2025 OR 2026 Catalonia OR Spain OR Mediterranean
+5 results
+Searched for Bayesian functional regression OR hierarchical model olive phenology PEP725 OR Fenocat
+5 results
+Yes — pulling additional PEP725 olive (Olea europaea) data is an excellent move and will substantially strengthen a Bayesian functional regression (or Bayesian hierarchical space-time) approach. Your original ~1000 Catalonia records (2013–2021) are already valuable, but expanding via PEP725 dramatically increases sample size, spatial coverage across the Mediterranean gradient, number of cultivars/sites, and years. As of early 2026, PEP725 holds over 19,700 Spanish records for olives (465 stations, 1946–2025), plus strong Italian and other Mediterranean contributions. Olea europaea is one of the more-downloaded species (~1,000 downloads historically).
+
+This directly mitigates the main limitations of small datasets in Bayesian functional models: more functional predictors (daily weather trajectories per site-year), tighter posterior estimates for the smooth coefficient functions β(t), better hierarchical shrinkage across cultivars and regions, and more reliable temporal/spatial cross-validation.
+
+Why This Data Expansion Helps Bayesian Functional Regression Specifically
+Larger N for functional predictors: Each site-year becomes a “curve” of daily weather (temperature, VPD, precipitation, photoperiod, extremes) from a fixed start (e.g., previous Nov 1). More records let the model non-parametrically discover critical windows (strong negative weights on warm winter days = de-chilling; positive forcing in spring) without rigid GDD or CAC assumptions.
+Hierarchical structure: Model cultivar-specific (via DUN or clustered early/mid-late groups), site-specific, and region-specific random effects or spatial GPs (Catalonia vs. broader Spain vs. Italy). The new data lets the Bayesian hierarchy borrow strength effectively.
+Better uncertainty quantification: Full posteriors on predicted DOY for BBCH 60/65 (or latent development rate) become sharper and more trustworthy for operational use or climate projections.
+Alignment with olive literature: Recent large-scale Italian work (PHENAGRI database) shows temperature-driven developmental rate (DR) functions explain budbreak-to-flowering extremely well (r² 0.93–0.96, RMSE 3.9–6.6 days), while later phases are noisier. Mediterranean PLS studies (Spain/Italy/Tunisia) confirm autumn/winter/spring temperatures explain 77–84% of flowering variance. Your functional regression can recover these patterns (and interactions) flexibly.
+The new R package pep725 (released recently by Templ et al.) is perfect for this — it handles data access, quality diagnostics, spatio-temporal analysis, and visualization with dedicated vignettes. Use it to download harmonized BBCH data for Olea europaea across Spain (including more Fenocat/Catalonia records), then merge with your weather observations and DUN-derived cultivar info.
+
+Updated Modeling Plan (Bayesian Functional + Time-Series Flavor)
+Treat the problem as scalar-on-function regression (predict DOY or latent stage from weather functions) or a daily state-space model of latent phenological progress, all in a Bayesian hierarchical framework.
+
+Core model sketch (scalar-on-function):
+
+Y
+i
+​
+ =∫
+t
+start
+​
+
+t
+i
+​
+
+​
+ β(t)X
+i
+​
+ (t)dt+Z
+i
+​
+ γ+u
+c(i)
+​
+ +v
+s(i)
+​
+ +ϵ
+i
+​
+
+Y
+i
+​
+ : DOY of key phase (filter to phase_id 60/65 or equivalent BBCH) or a transformed development score.
+X
+i
+​
+ (t): Multivariate functional predictors (smoothed daily T, chill proxy, VPD, precip, daylength, frost/hot days). Smoothing via B-splines or functional PCA.
+β(t): Smooth functional coefficient (estimated with Bayesian splines or Gaussian process). Its posterior shape reveals when and how weather drives phenology — far more insightful than GDD.
+Hierarchical terms: u
+c
+​
+  for cultivar (or cultivar group), v
+s
+​
+  for site (with spatial SPDE on lat/lon/alt if using INLA).
+Priors: Informative on key windows from olive physiology (e.g., stronger weight around 8–12°C chilling optimum); shrinkage priors (ridge, lasso, horseshoe) to prevent overfitting.
+Implementation options in R (leveraging the new pep725 package):
+
+Start with GFR/BGLR framework (Montesinos-López et al. — directly designed for Bayesian functional regression in agriculture). The Genomic Functional Regression (GFR) package extends BGLR for scalar-on-function models with Bayesian Ridge, BayesB, Bayesian Lasso, etc. It handles the basis expansion efficiently and scales to thousands of records.
+brms + splines for full Bayesian MCMC (easy to add hierarchical random effects, ordinal responses if modeling current BBCH stage, and posterior predictive checks).
+INLA or cmdstanr for faster inference on spatio-temporal Gaussian processes or state-space formulations (daily latent development driven by weather).
+Hybrid extension: Include your optimized CAC-style chilling accumulation (or Gaussian chill portions) as an additional scalar covariate alongside the functional weather terms. This combines physiological grounding with flexible discovery.
+Workflow:
+
+Use pep725 package to pull expanded Olea europaea data for Spain (and Italy if useful). Harmonize phase_id/BBCH codes.
+Merge with high-resolution daily weather (SMC grids for Catalonia, ERA5-Land or AEMET for broader Spain).
+Align all series to a common time grid (previous Nov–current June). Create functional objects (fda or fdapace packages).
+Engineer scalars: cultivar group (from DUN + lat/lon clustering), spatial covariates (lon/lat/alt/coast distance), previous-year proxy for alternate bearing.
+Fit the Bayesian functional model; extract posterior of β(t) to visualize important periods.
+Validate with temporal forward chaining (train on earlier years, test recent), spatial leave-one-region-out, and cultivar-stratified CV. Compare RMSE/MAE in days + posterior coverage against baselines (GDD, optimized CAC_GDD, frequentist functional regression via refund/mgcv).
+Expected gains: With the expanded dataset you should achieve RMSE in the 4–7 day range for flowering stages (matching or beating the best Italian thermal-time results) while gaining full uncertainty quantification and non-parametric insight into drivers. The extra data also supports climate-change projections (shift in flowering under future scenarios) and operational forecasting for Catalonia olives.
+
+This is now a robust, publishable setup — the combination of expanded PEP725 data, the new R package, and Bayesian functional regression directly addresses GDD’s simplicity while staying grounded in olive biology.
+
+If you want, I can provide:
+
+A concrete code skeleton (loading with pep725, functional data prep, GFR or brms model specification).
+Stan code outline for a hierarchical daily time-series version.
+Specific guidance on contacting PEP725 for the newest Spanish records or integrating Fenocat data.
+Just let me know your preferred language/tools, which phases matter most, or how many additional records you expect to pull. This expanded dataset makes the Bayesian approach even more powerful.
+
+
+
+10 citations
+
+Favicon for http://www.pep725.eu/data.php
+
+Favicon for http://www.zamg.ac.at/pep725/statistics.php
+
+Favicon for https://pep725.eu/
+
+Favicon for http://www.pep725.eu/index.php
+
+Favicon for http://www.zamg.ac.at/pep725/
+
+Favicon for https://pmc.ncbi.nlm.nih.gov/articles/PMC8230019/
+
+Favicon for https://link.springer.com/article/10.1007/s00484-014-0876-7?error=cookies_not_supported&code=d1a48f35-204f-407a-9034-d3dc9131a22d
+
+Favicon for https://plantmethods.biomedcentral.com/article/10.1186/s13007-018-0314-7
+
+Favicon for https://meetingorganizer.copernicus.org/EGU22/EGU22-4336.html?pdf=
+
+Favicon for https://mdpi-res.com/d_attachment/plants/plants-10-01115/article_deploy/plants-10-01115-v3.pdf?version=1622722003
+Getting PEP725 Datasets
+http://www.pep725.eu/data.php
+Favicon for http://www.pep725.eu/data.php
+www.pep725.eu
+PEP725 statistics
+http://www.zamg.ac.at/pep725/statistics.php
+Favicon for http://www.zamg.ac.at/pep725/statistics.php
+www.zamg.ac.at
+PEP725: Homepage
+https://pep725.eu/
+Favicon for https://pep725.eu/
+pep725.eu
+About PEP725
+http://www.pep725.eu/index.php
+Favicon for http://www.pep725.eu/index.php
+www.pep725.eu
+About PEP725
+http://www.zamg.ac.at/pep725/
+Favicon for http://www.zamg.ac.at/pep725/
+www.zamg.ac.at
+A Phenological Model for Olive ( Olea europaea L. var europaea ) Growing in Italy
+https://pmc.ncbi.nlm.nih.gov/articles/PMC8230019/
+Favicon for https://pmc.ncbi.nlm.nih.gov/articles/PMC8230019/
+pmc.ncbi.nlm.nih.gov
+Phenological models to predict the main flowering phases of olive ( Olea europaea L.) along a latitudinal and longitudinal gradient across the Mediterranean region
+https://link.springer.com/article/10.1007/s00484-014-0876-7?error=cookies_not_supported&code=d1a48f35-204f-407a-9034-d3dc9131a22d
+Favicon for https://link.springer.com/article/10.1007/s00484-014-0876-7?error=cookies_not_supported&code=d1a48f35-204f-407a-9034-d3dc9131a22d
+link.springer.com
+Bayesian functional regression as an alternative statistical analysis of high-throughput phenotyping data of modern agriculture | Plant Methods | Springer Nature Link
+https://plantmethods.biomedcentral.com/article/10.1186/s13007-018-0314-7
+Favicon for https://plantmethods.biomedcentral.com/article/10.1186/s13007-018-0314-7
+plantmethods.biomedcentral.com
+CO Meeting Organizer EGU22
+https://meetingorganizer.copernicus.org/EGU22/EGU22-4336.html?pdf=
+Favicon for https://meetingorganizer.copernicus.org/EGU22/EGU22-4336.html?pdf=
+meetingorganizer.copernicus.org
+A Phenological Model for Olive (Olea europaea L. var europaea) Growing in Italy
+https://mdpi-res.com/d_attachment/plants/plants-10-01115/article_deploy/plants-10-01115-v3.pdf?version=1622722003
+Favicon for https://mdpi-res.com/d_attachment/plants/plants-10-01115/article_deploy/plants-10-01115-v3.pdf?version=1622722003
+mdpi-res.com
+Previous slideNext slide
+
+
+
+
+
+
+
+59 seconds ago
+Favicon for openai
+GPT-5.5
+Reasoning
+Yes — more PEP725 olive data would help a lot, especially if your current Catalonia subset has only about 1,000 records. But you should not simply concatenate everything and fit one pooled model. The better strategy is to use the wider PEP725 olive data as hierarchical training information while letting Catalonia, cultivar, site, and provider effects remain partially distinct.
+
+In short:
+
+Use broader PEP725 olive data to learn general olive phenology-weather relationships, then specialize the model to Catalonia using hierarchical regional, cultivar, and site effects.
+
+Why extra PEP725 olive data helps
+Your current data likely has limited variation in:
+
+years,
+cultivars,
+locations,
+elevation,
+weather extremes,
+spring timing,
+drought conditions,
+observer/provider methods.
+More PEP725 olive records would improve the model because it gives you more examples of how olive phenology responds under different combinations of:
+
+temperature+chill+water stress+radiation+latitude+cultivar
+This is especially useful for Bayesian functional regression, because the model needs enough data to learn lag-response functions like:
+
+β
+T
+​
+ (u),β
+P
+​
+ (u),β
+VPD
+​
+ (u),β
+R
+​
+ (u)
+where u is lag in days before the phenological observation.
+
+With only Catalonia, the model may learn unstable lag effects. With more olive observations across Europe, the lag kernels become much more identifiable.
+
+But do not blindly pool everything
+The danger is that olive phenology in Catalonia may not behave exactly like olive phenology elsewhere.
+
+For example, records from:
+
+Andalusia,
+Italy,
+Greece,
+southern France,
+Portugal,
+Croatia,
+may involve different:
+
+cultivars,
+management systems,
+irrigation,
+observation protocols,
+BBCH interpretation,
+microclimates,
+chilling regimes,
+drought exposure.
+If you pool everything without structure, the model may become too generic and underperform in Catalonia.
+
+Recommended approach: hierarchical Bayesian model
+Use a hierarchical structure where the broader PEP725 dataset informs the general response, but Catalonia gets its own regional adjustment.
+
+Basic model
+Let S
+j
+​
+  be the observed phenological stage for observation j.
+
+Use an ordinal model:
+
+S
+j
+​
+ ∼OrderedLogit(η
+j
+​
+ ,θ)
+with:
+
+η
+j
+​
+ =α+∫
+0
+L
+​
+ β
+T
+​
+ (u)T
+j
+​
+ (u)du+∫
+0
+L
+​
+ β
+P
+​
+ (u)P
+j
+​
+ (u)du+∫
+0
+L
+​
+ β
+VPD
+​
+ (u)VPD
+j
+​
+ (u)du+∫
+0
+L
+​
+ β
+R
+​
+ (u)R
+j
+​
+ (u)du+b
+cultivar[j]
+​
+ +b
+region[j]
+​
+ +b
+site[j]
+​
+ +b
+year[j]
+​
+ +b
+provider[j]
+​
+
+where:
+
+β
+T
+​
+ (u) is the general olive temperature lag-response function,
+β
+P
+​
+ (u) is the rainfall lag-response function,
+β
+VPD
+​
+ (u) is the drought/atmospheric demand lag-response function,
+β
+R
+​
+ (u) is the radiation lag-response function,
+b
+cultivar
+​
+  handles cultivar timing,
+b
+region
+​
+  handles Catalonia vs other regions,
+b
+site
+​
+  handles microclimate and management,
+b
+year
+​
+  handles annual anomalies,
+b
+provider
+​
+  handles observer or data-source differences.
+This lets the model learn from all olive data while still adapting to Catalonia.
+
+Even better: region-specific functional effects
+If you get enough records outside Catalonia, you can allow the weather-response functions themselves to vary by region.
+
+For example:
+
+β
+T,r
+​
+ (u)=β
+T
+​
+ (u)+δ
+T,r
+​
+ (u)
+where:
+
+β
+T
+​
+ (u) is the general olive temperature response,
+δ
+T,r
+​
+ (u) is the regional deviation for region r.
+For Catalonia:
+
+β
+T,Catalonia
+​
+ (u)=β
+T
+​
+ (u)+δ
+T,Catalonia
+​
+ (u)
+This is valuable because olive phenology in coastal Catalonia may respond differently from southern Spain or inland Italy.
+
+Data hierarchy I would use
+Structure the model like this:
+
+Level	Example	Purpose
+Observation	one phase_id on one date	individual training point
+Site-year	one location in one season	repeated phenological trajectory
+Site	orchard or observation point	microclimate, management
+Cultivar	Arbequina, Picual, Hojiblanca, etc.	genetic timing
+Region	Catalonia, Andalusia, Italy, Greece	climate-zone adjustment
+Provider	PEP725 provider ID	observation protocol differences
+Year	2013, 2014, etc.	annual weather and reporting effects
+This is a strong setup for Bayesian modeling.
+
+How broader PEP725 data helps specific parts of the model
+1. Better lag-response curves
+Functional regression needs to estimate which past weather windows matter.
+
+With more olive records, you can learn whether phenology is most sensitive to weather:
+
+0–15 days before observation,
+15–45 days before observation,
+45–90 days before observation,
+90–180 days before observation,
+180–240 days before observation.
+The model can learn curves such as:
+
+η
+j
+​
+ =
+u=1
+∑
+240
+​
+ β
+T
+​
+ (u)T
+j,t−u
+​
+
+instead of assuming GDD.
+
+2. Better cultivar effects
+If DUN helps you identify Catalonian cultivars, broader PEP725 may also include named cultivars or at least locations where cultivar can be inferred.
+
+You can estimate cultivar effects like:
+
+b
+cultivar
+​
+ ∼N(0,σ
+cultivar
+2
+​
+ )
+or cultivar-by-stage effects:
+
+b
+cultivar,k
+​
+ ∼N(0,σ
+cultivar,k
+2
+​
+ )
+This matters because cultivars can differ strongly in phenological timing.
+
+For Catalonia, likely important cultivars include things like:
+
+Arbequina,
+Empeltre,
+Morrut,
+Sevillenca,
+Argudell,
+Picual,
+Hojiblanca,
+depending on the DUN mapping.
+
+Even if cultivar labels are incomplete, partial information helps.
+
+3. Better estimates for rare stages
+With only 1,000 records, some phase_id stages may be sparse.
+
+Extra PEP725 olive data helps estimate cutpoints or transition behavior for less frequent stages.
+
+For an ordinal model:
+
+P(S
+j
+​
+ ≤k)=logit
+−1
+ (θ
+k
+​
+ −η
+j
+​
+ )
+you need enough observations across stages to estimate the thresholds θ
+k
+​
+  reliably.
+
+4. Better prediction in unusual years
+Catalonia from 2013–2021 may not contain enough extreme weather variability. Wider PEP725 data likely includes:
+
+warmer springs,
+colder winters,
+drought years,
+wetter years,
+heatwaves,
+late frosts.
+That helps the model extrapolate better.
+
+Main risks with adding broader PEP725 data
+1. Phenophase harmonization
+Make sure phase_id means the same thing across providers and countries.
+
+PEP725 phase codes are standardized, but provider interpretation can still differ. Include provider_id as a random effect:
+
+b
+provider
+​
+ ∼N(0,σ
+provider
+2
+​
+ )
+This helps absorb systematic observer differences.
+
+2. Cultivar confounding
+In olives, region and cultivar are often confounded.
+
+For example, if one cultivar dominates Catalonia and another dominates Andalusia, then the model may confuse:
+
+cultivar effectwithregional climate effect
+To reduce this:
+
+include both region and cultivar,
+use partial pooling,
+keep cultivar uncertainty from DUN,
+avoid overinterpreting cultivar effects unless multiple cultivars appear in multiple regions.
+3. Climate-domain shift
+A model trained heavily on hotter or drier regions might mispredict Catalonia unless region effects are included.
+
+Use spatial or climate-zone random effects:
+
+b
+climate zone
+​
+ ∼N(0,σ
+climate
+2
+​
+ )
+Potential grouping variables:
+
+region,
+Köppen climate zone,
+bioclimatic cluster,
+distance to coast,
+elevation band.
+4. Different observation intensity
+Some sites may have many observations, others only one or two. Without correction, dense sites dominate the likelihood.
+
+Possible fixes:
+
+weight site-years approximately equally,
+include site random effects,
+evaluate by held-out site-years rather than raw rows.
+Best modeling plan with expanded PEP725 data
+Step 1: Build a broad olive phenology dataset
+Combine:
+
+your Catalonia PEP725 records,
+other PEP725 olive records,
+daily weather for every site,
+cultivar inferred from DUN or other parcel data where possible,
+static geographic variables.
+Create one standardized table:
+
+variable	description
+site_id	unique spatial observation site
+provider_id	PEP725 provider
+region	Catalonia, Andalusia, Italy, etc.
+lat, lon, alt	location
+year, date, doy	timing
+phase_id	observed phenological stage
+cultivar	inferred or observed
+cultivar_prob	confidence if inferred
+weather_source	station, grid, reanalysis
+tmean, tmin, tmax	daily temperature
+precip	precipitation
+vpd	vapor pressure deficit
+rad	radiation
+et0	reference evapotranspiration
+Step 2: Create lagged weather functions
+For each phenological observation, attach weather histories for the previous L days.
+
+I would use:
+
+L=240
+for temperature, because winter conditions may matter.
+
+For water and VPD, perhaps:
+
+L=120 or 180
+For example:
+
+Predictor	Lag window
+tmean	0–240 days
+tmin	0–240 days
+tmax	0–240 days
+precip	0–180 days
+vpd	0–120 days
+rad	0–120 days
+et0	0–120 days
+Step 3: Use spline-compressed functional predictors
+Do not estimate 240 daily lag coefficients independently.
+
+Use basis functions:
+
+β
+T
+​
+ (u)=
+m=1
+∑
+M
+​
+ γ
+T,m
+​
+ B
+m
+​
+ (u)
+where M might be 6 to 12.
+
+Then the temperature contribution becomes:
+
+u=1
+∑
+L
+​
+ β
+T
+​
+ (u)T
+j,t−u
+​
+ =
+m=1
+∑
+M
+​
+ γ
+T,m
+​
+ [
+u=1
+∑
+L
+​
+ B
+m
+​
+ (u)T
+j,t−u
+​
+ ]
+This is much more stable.
+
+Step 4: Fit a Bayesian ordinal functional model
+A good first expanded model would be:
+
+S
+j
+​
+ ∼OrderedLogit(η
+j
+​
+ ,θ)
+η
+j
+​
+ =α+
+m
+∑
+​
+ γ
+T,m
+​
+ T
+j,m
+∗
+​
+ +
+m
+∑
+​
+ γ
+P,m
+​
+ P
+j,m
+∗
+​
+ +
+m
+∑
+​
+ γ
+V,m
+​
+ VPD
+j,m
+∗
+​
+ +
+m
+∑
+​
+ γ
+R,m
+​
+ R
+j,m
+∗
+​
+ +γ
+D
+​
+ photoperiod
+j
+​
+ +b
+cultivar[j]
+​
+ +b
+region[j]
+​
+ +b
+site[j]
+​
+ +b
+year[j]
+​
+ +b
+provider[j]
+​
+
+with hierarchical priors:
+
+b
+cultivar
+​
+ ∼N(0,σ
+cultivar
+2
+​
+ )
+b
+region
+​
+ ∼N(0,σ
+region
+2
+​
+ )
+b
+site
+​
+ ∼N(0,σ
+site
+2
+​
+ )
+b
+year
+​
+ ∼N(0,σ
+year
+2
+​
+ )
+b
+provider
+​
+ ∼N(0,σ
+provider
+2
+​
+ )
+Add Catalonia-specific adaptation
+Because your target use case is Catalonia, add a Catalonia offset:
+
+η
+j
+​
+ =η
+j,global olive
+​
+ +b
+Catalonia
+​
+
+And, if you have enough Catalonia records, allow Catalonia-specific deviations in the lag functions:
+
+β
+T,Catalonia
+​
+ (u)=β
+T
+​
+ (u)+δ
+T,Catalonia
+​
+ (u)
+Same for precipitation and VPD:
+
+β
+P,Catalonia
+​
+ (u)=β
+P
+​
+ (u)+δ
+P,Catalonia
+​
+ (u)
+β
+VPD,Catalonia
+​
+ (u)=β
+VPD
+​
+ (u)+δ
+VPD,Catalonia
+​
+ (u)
+This is close to a Bayesian transfer-learning model:
+
+global PEP725 olive data learns the general biology,
+Catalonia data fine-tunes the local response.
+If you want to treat it as a true time series
+If many sites have repeated observations through the season, use a latent state model.
+
+Define latent phenological development:
+
+z
+i,t
+​
+ =z
+i,t−1
+​
+ +r
+i,t
+​
+
+where development rate is:
+
+r
+i,t
+​
+ =softplus(α+f
+T
+​
+ (weather history)+f
+P
+​
+ (water history)+f
+VPD
+​
+ (VPD history)+b
+cultivar
+​
+ +b
+site
+​
+ +b
+year
+​
+ )
+The softplus function keeps development nonnegative:
+
+r
+i,t
+​
+ >0
+Then observed stages are thresholds:
+
+S
+i,t
+​
+ =kifθ
+k−1
+​
+ <z
+i,t
+​
+ ≤θ
+k
+​
+
+This is biologically elegant, but it requires enough within-season observations to identify trajectories. If many site-years only have one observation, start with the ordinal functional regression first.
+
+Validation strategy with expanded PEP725 data
+You should validate in a way that answers your real question: does this help Catalonia?
+
+Use several validation designs.
+
+1. Catalonia holdout years
+Train on all non-held-out years plus broader PEP725 data, test on Catalonia in held-out years.
+
+Example:
+
+Train	Test
+all regions 2013–2020	Catalonia 2021
+all regions except 2017	Catalonia 2017
+all regions except 2019	Catalonia 2019
+This tests seasonal forecasting skill.
+
+2. Catalonia held-out sites
+Hold out Catalonia sites entirely.
+
+This tests spatial generalization within Catalonia.
+
+3. Train without Catalonia, then fine-tune
+This is a useful transfer-learning experiment.
+
+Compare:
+
+Model	Training data
+Catalonia-only	Catalonia PEP725 only
+Global-only	non-Catalonia PEP725 only
+Global plus Catalonia	all olive data
+Hierarchical global plus Catalonia	all data with regional partial pooling
+The last should usually be best.
+
+Baselines to compare
+Keep GDD as a baseline, but compare against several versions:
+
+Model	Description
+Calendar	phase_id ~ doy
+Site-calendar	phase_id ~ doy + site
+GDD	fixed base-temperature accumulation
+Cultivar GDD	cultivar-specific GDD threshold
+Chill + forcing	winter chill plus spring heat
+Catalonia-only Bayesian functional	your 1,000 records
+Global pooled Bayesian functional	all olive data, no hierarchy
+Hierarchical Bayesian functional	all olive data with region/site/cultivar effects
+The most important comparison is:
+
+Does the hierarchical global-plus-Catalonia model beat the Catalonia-only model on held-out Catalonia years and sites?
+
+My recommended final design
+I would build the model in this order:
+
+Model 1: strong non-Bayesian benchmark
+Use CatBoost or LightGBM with lag-window features:
+
+day of year,
+photoperiod,
+chill features,
+temperature windows,
+precipitation windows,
+VPD windows,
+radiation windows,
+cultivar,
+site,
+region,
+year.
+This gives you a strong predictive benchmark quickly.
+
+Model 2: Bayesian functional ordinal model
+Use spline-compressed lagged weather histories and ordinal likelihood.
+
+This gives you interpretability and uncertainty.
+
+Model 3: Bayesian hierarchical regional model
+Add broader PEP725 olive data with:
+
+cultivar random effects,
+region random effects,
+provider random effects,
+site random effects,
+year random effects.
+Model 4: latent state-space model
+Only if the data contain enough repeated observations per site-year.
+
+Bottom line
+Yes, adding more PEP725 olive data should help substantially.
+
+But the best use is not naive pooling. Use a hierarchical Bayesian functional model:
+
+broader PEP725 olive data learns the general olive phenology-weather relationship, while Catalonia-specific, cultivar-specific, site-specific, year-specific, and provider-specific effects adapt the model to your target region.
+
+That gives you a much stronger alternative to GDD and should improve both prediction and biological interpretation.

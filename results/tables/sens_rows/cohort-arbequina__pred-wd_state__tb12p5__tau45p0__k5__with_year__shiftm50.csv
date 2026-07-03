@@ -1,2 +1,0 @@
-cohort,predictor,base_temp,tau_gdd,basis_k,year_re_mode,window_shift_gdd,stem,delta_median,delta_q_lo,delta_q_hi,prob_delta_gt_0
-arbequina,wd_state,12.5,45.0,5,with_year,-50,numpyro_main_arbequina_wd_state_sens_tb12p5_tau45p0_k5_with_year,0.00020654496008048508,7.353015262190286e-05,0.0003301563948729168,0.991375

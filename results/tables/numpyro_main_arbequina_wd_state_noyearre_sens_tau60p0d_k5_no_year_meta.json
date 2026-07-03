@@ -1,0 +1,29 @@
+{
+  "cohort": "arbequina",
+  "predictor": "wd_state",
+  "include_year_re": false,
+  "formula": "yield_tha_centered ~ f(wd_state_reduced_standardized) + lag_yield_centered [+ (1|year)]",
+  "n_obs": 90,
+  "n_comarcas": 10,
+  "n_years": 9,
+  "n_basis": 5,
+  "draws": 2000,
+  "tune": 2000,
+  "chains": 4,
+  "chain_method": "vectorized",
+  "target_accept": 0.95,
+  "sd_eps": 1e-06,
+  "exclude_year": null,
+  "stem_suffix": "sens_tau60p0d_k5_no_year",
+  "bad_rhat_count_gt_1.01": 0,
+  "low_ess_bulk_count_lt_400": 0,
+  "files": {
+    "posterior_netcdf": "/home/tsardoz/phd/catalonia/results/posteriors/numpyro_main_arbequina_wd_state_noyearre_sens_tau60p0d_k5_no_year.nc",
+    "summary_csv": "/home/tsardoz/phd/catalonia/results/tables/numpyro_main_arbequina_wd_state_noyearre_sens_tau60p0d_k5_no_year_summary.csv",
+    "design_csv": "/home/tsardoz/phd/catalonia/results/tables/numpyro_main_arbequina_wd_state_noyearre_sens_tau60p0d_k5_no_year_design.csv",
+    "x_mean_npy": "/home/tsardoz/phd/catalonia/results/posteriors/numpyro_main_arbequina_wd_state_noyearre_sens_tau60p0d_k5_no_year_x_mean.npy",
+    "x_sd_npy": "/home/tsardoz/phd/catalonia/results/posteriors/numpyro_main_arbequina_wd_state_noyearre_sens_tau60p0d_k5_no_year_x_sd.npy",
+    "beta_coefs_phys_npy": "/home/tsardoz/phd/catalonia/results/posteriors/numpyro_main_arbequina_wd_state_noyearre_sens_tau60p0d_k5_no_year_beta_coefs_phys.npy",
+    "beta_t_draws_npy": "/home/tsardoz/phd/catalonia/results/posteriors/numpyro_main_arbequina_wd_state_noyearre_sens_tau60p0d_k5_no_year_beta_t_draws.npy"
+  }
+}

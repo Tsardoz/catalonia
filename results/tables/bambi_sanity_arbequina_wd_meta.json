@@ -1,5 +1,5 @@
 {
-  "formula": "yield_tha ~ wd_preflower_mean + wd_flowering_mean + wd_pit_mean + lag_yield",
+  "formula": "yield_tha ~ wd_S_pre_mean + wd_S5_mean + wd_S6_mean + wd_S7_mean + wd_S8_mean + lag_yield",
   "cohort": "arbequina",
   "predictor": "wd",
   "n_obs": 90,
@@ -12,30 +12,39 @@
   "bad_rhat_count_gt_1.01": 0,
   "low_ess_bulk_count_lt_400": 0,
   "stage_terms": [
-    "wd_preflower_mean",
-    "wd_flowering_mean",
-    "wd_pit_mean"
+    "wd_S_pre_mean",
+    "wd_S5_mean",
+    "wd_S6_mean",
+    "wd_S7_mean",
+    "wd_S8_mean"
   ],
   "contrast": {
-    "delta_name": "wd_pit_mean - wd_flowering_mean",
-    "delta_median": 0.01637291265284158,
-    "delta_q05": -0.0700342669588093,
-    "delta_q95": 0.10333163087562026,
-    "prob_delta_gt_0": 0.61175,
+    "delta_name": "wd_S7_mean - wd_S6_mean",
+    "delta_median": 0.0082838243604756,
+    "delta_q05": -0.1346143169509263,
+    "delta_q95": 0.14674523367368356,
+    "prob_delta_gt_0": 0.537,
     "all_contrasts": [
       {
-        "delta_name": "wd_pit_mean - wd_flowering_mean",
-        "delta_median": 0.01637291265284158,
-        "delta_q05": -0.0700342669588093,
-        "delta_q95": 0.10333163087562026,
-        "prob_delta_gt_0": 0.61175
+        "delta_name": "wd_S7_mean - wd_S6_mean",
+        "delta_median": 0.0082838243604756,
+        "delta_q05": -0.1346143169509263,
+        "delta_q95": 0.14674523367368356,
+        "prob_delta_gt_0": 0.537
       },
       {
-        "delta_name": "wd_flowering_mean - wd_preflower_mean",
-        "delta_median": 0.024020889330895297,
-        "delta_q05": -0.07918498227111498,
-        "delta_q95": 0.12278673415772785,
-        "prob_delta_gt_0": 0.647
+        "delta_name": "wd_S6_mean - wd_S5_mean",
+        "delta_median": -0.04907974427562399,
+        "delta_q05": -0.15620319319112533,
+        "delta_q95": 0.05978829044211045,
+        "prob_delta_gt_0": 0.2305
+      },
+      {
+        "delta_name": "wd_S5_mean - wd_S_pre_mean",
+        "delta_median": -0.07162286823340887,
+        "delta_q05": -0.3010853002665923,
+        "delta_q95": 0.14915879672623125,
+        "prob_delta_gt_0": 0.30875
       }
     ]
   }

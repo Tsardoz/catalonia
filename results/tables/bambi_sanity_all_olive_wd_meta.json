@@ -1,9 +1,9 @@
 {
-  "formula": "yield_tha ~ wd_preflower_mean + wd_flowering_mean + wd_pit_mean + lag_yield",
+  "formula": "yield_tha ~ wd_S_pre_mean + wd_S5_mean + wd_S6_mean + wd_S7_mean + wd_S8_mean + lag_yield",
   "cohort": "all_olive",
   "predictor": "wd",
-  "n_obs": 171,
-  "n_comarcas": 19,
+  "n_obs": 180,
+  "n_comarcas": 20,
   "n_years": 9,
   "draws": 1000,
   "tune": 1000,
@@ -12,30 +12,39 @@
   "bad_rhat_count_gt_1.01": 0,
   "low_ess_bulk_count_lt_400": 0,
   "stage_terms": [
-    "wd_preflower_mean",
-    "wd_flowering_mean",
-    "wd_pit_mean"
+    "wd_S_pre_mean",
+    "wd_S5_mean",
+    "wd_S6_mean",
+    "wd_S7_mean",
+    "wd_S8_mean"
   ],
   "contrast": {
-    "delta_name": "wd_pit_mean - wd_flowering_mean",
-    "delta_median": 0.008264935003262641,
-    "delta_q05": -0.05072218011494524,
-    "delta_q95": 0.06954752785879065,
-    "prob_delta_gt_0": 0.59425,
+    "delta_name": "wd_S7_mean - wd_S6_mean",
+    "delta_median": -0.046773091368581404,
+    "delta_q05": -0.13134249380696575,
+    "delta_q95": 0.03620677993754582,
+    "prob_delta_gt_0": 0.17975,
     "all_contrasts": [
       {
-        "delta_name": "wd_pit_mean - wd_flowering_mean",
-        "delta_median": 0.008264935003262641,
-        "delta_q05": -0.05072218011494524,
-        "delta_q95": 0.06954752785879065,
-        "prob_delta_gt_0": 0.59425
+        "delta_name": "wd_S7_mean - wd_S6_mean",
+        "delta_median": -0.046773091368581404,
+        "delta_q05": -0.13134249380696575,
+        "delta_q95": 0.03620677993754582,
+        "prob_delta_gt_0": 0.17975
       },
       {
-        "delta_name": "wd_flowering_mean - wd_preflower_mean",
-        "delta_median": -0.03487915232824211,
-        "delta_q05": -0.09914452277903892,
-        "delta_q95": 0.029690535970320713,
-        "prob_delta_gt_0": 0.18475
+        "delta_name": "wd_S6_mean - wd_S5_mean",
+        "delta_median": -0.001728658270290728,
+        "delta_q05": -0.061844967223520564,
+        "delta_q95": 0.05780792614525543,
+        "prob_delta_gt_0": 0.475
+      },
+      {
+        "delta_name": "wd_S5_mean - wd_S_pre_mean",
+        "delta_median": -0.11017234630886125,
+        "delta_q05": -0.2193922689810689,
+        "delta_q95": 0.000801030096312928,
+        "prob_delta_gt_0": 0.05125
       }
     ]
   }
