@@ -1,0 +1,6 @@
+cohort,n_components,pooled_loyo_rmse,pooled_loyo_r2,n_obs,n_folds,note
+arbequina,1,0.5353252255579978,-0.47797915716706685,90,9,selection-optimistic / exploratory — not used to pick the headline model
+arbequina,2,0.5261420006963229,-0.4277061689506787,90,9,selection-optimistic / exploratory — not used to pick the headline model
+arbequina,3,0.4911816049619826,-0.24427701873191654,90,9,selection-optimistic / exploratory — not used to pick the headline model
+arbequina,4,0.4931207293358192,-0.25412091599656184,90,9,selection-optimistic / exploratory — not used to pick the headline model
+arbequina,5,0.4863996888686361,-0.22016754523408366,90,9,selection-optimistic / exploratory — not used to pick the headline model

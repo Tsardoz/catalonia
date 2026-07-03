@@ -1,0 +1,30 @@
+{
+  "cohort": "all_olive",
+  "predictor": "wd_state",
+  "tau_days": 45,
+  "n_obs": 162,
+  "n_folds": 9,
+  "headline_n_components": 1,
+  "shape_components": [
+    1,
+    2,
+    3
+  ],
+  "max_components_sweep": 5,
+  "bayesian_stem_full": "numpyro_main_all_olive_wd_state_noyearre_nolagyield",
+  "scale_check": {
+    "predict_consistency_ok": true,
+    "predict_consistency_max_abs_diff": 2.7755575615628914e-16,
+    "integral_abs_coef_fpls": 0.34250981651359724,
+    "integral_abs_beta_bayesian_median": 0.3146809113925003,
+    "magnitude_ratio": 1.088435313721289,
+    "scale_suspect": false
+  },
+  "caveats": [
+    "Smoothers, not deployable models: both sides drop lag_yield and the year RE, so neither LOYO RMSE reflects the project's deployable model performance.",
+    "fPLS is supervised dimension reduction; the Bayesian model is an unsupervised RW2 smoothness prior on a fixed 5-basis reduction \u2014 different estimator classes, not two settings of one knob.",
+    "fpls_component_selection is selection-optimistic (k chosen to minimize the same score reported) and is NOT used to choose the headline model; the headline k is fixed a priori.",
+    "The headline RMSE comparison (k=1 fPLS vs. 5-basis RW2 Bayesian) is confounded by a flexibility asymmetry, not just fold count \u2014 do not read the RMSE gap as 'which method is better.'",
+    "~9 LOYO folds means pooled RMSE is a noisy, underpowered estimator; the beta(t) shape overlay (primary result) is more informative than the RMSE table (secondary diagnostic)."
+  ]
+}

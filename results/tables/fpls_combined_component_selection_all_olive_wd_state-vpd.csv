@@ -1,0 +1,6 @@
+cohort,predictors,n_components,pooled_loyo_rmse,pooled_loyo_r2,n_obs,n_folds,note
+all_olive,wd_state-vpd,1,0.4325611947381571,-0.0892269628266058,162,9,selection-optimistic / exploratory -- not used to pick the headline model
+all_olive,wd_state-vpd,2,0.4297635869976931,-0.0751832817206195,162,9,selection-optimistic / exploratory -- not used to pick the headline model
+all_olive,wd_state-vpd,3,0.4351426864530197,-0.10226660118268405,162,9,selection-optimistic / exploratory -- not used to pick the headline model
+all_olive,wd_state-vpd,4,0.4695978080698838,-0.2837350334645019,162,9,selection-optimistic / exploratory -- not used to pick the headline model
+all_olive,wd_state-vpd,5,0.48833102839613035,-0.3881995886045253,162,9,selection-optimistic / exploratory -- not used to pick the headline model

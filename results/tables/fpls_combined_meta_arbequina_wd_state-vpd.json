@@ -1,0 +1,28 @@
+{
+  "cohort": "arbequina",
+  "predictors": [
+    "wd_state",
+    "vpd"
+  ],
+  "n_basis_per_predictor": {
+    "wd_state": 5,
+    "vpd": 5
+  },
+  "headline_n_components": 1,
+  "n_obs": 90,
+  "n_folds": 9,
+  "tool": "sklearn.cross_decomposition.PLSRegression(scale=True) on concatenated 5-basis-reduced predictor blocks; skfda's FPLSRegression has no multi-block support (verified against its source).",
+  "caveats": [
+    "No Bayesian counterpart: the Bayesian model is single-predictor only; this combined result is fPLS-only, not a triangulation against a second estimator.",
+    "Headline k is fixed a priori and independent of the LOYO sweep (same selection-leakage avoidance as the single-predictor comparison).",
+    "Combining predictors increases in-sample flexibility roughly mechanically; it does not by itself fix the small-n (~9 independent years) LOYO ceiling seen throughout this comparison -- check the loyo table below before concluding the combination helped.",
+    "Per-predictor beta(t) curves are NOT on a shared physical scale (see the stage_means table's separate beta_{predictor} columns) -- compare shape/sign within a predictor across stages, not magnitude across predictors."
+  ],
+  "outputs": {
+    "component_selection_csv": "/home/tsardoz/phd/catalonia/results/tables/fpls_combined_component_selection_arbequina_wd_state-vpd.csv",
+    "loyo_csv": "/home/tsardoz/phd/catalonia/results/tables/fpls_combined_loyo_arbequina_wd_state-vpd.csv",
+    "beta_t_csv": "/home/tsardoz/phd/catalonia/results/tables/fpls_combined_beta_t_arbequina_wd_state-vpd.csv",
+    "stage_means_csv": "/home/tsardoz/phd/catalonia/results/tables/fpls_combined_stage_means_arbequina_wd_state-vpd.csv",
+    "beta_t_png": "/home/tsardoz/phd/catalonia/results/figures/fpls_combined_beta_t_arbequina_wd_state-vpd.png"
+  }
+}

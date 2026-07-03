@@ -1,0 +1,4 @@
+cohort,model,complexity,pooled_loyo_rmse,pooled_loyo_r2,n_obs,n_folds,note
+arbequina,fpls_combined[wd_state-vpd],k=1,0.46519818213134356,-0.11611491081652936,90,9,"secondary, likely-underpowered diagnostic (~9 folds) -- not the primary result"
+arbequina,fpls_single[wd_state],k=1 (a priori),0.4570740183811018,-0.0774719247058581,90,9,"reference from the existing single-predictor comparison, not refit here"
+arbequina,fpls_single[vpd],k=1 (a priori),0.5353252255579978,-0.4779791571670668,90,9,"reference from the existing single-predictor comparison, not refit here"

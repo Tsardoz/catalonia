@@ -159,6 +159,17 @@ def parse_args() -> argparse.Namespace:
         "Years are dropped at the year level (all comarca-rows for that "
         "year), consistent with the LOYO framework.",
     )
+    parser.add_argument(
+        "--combine-predictors", type=str, default="",
+        help="Comma-separated predictor names (e.g. wd_state,vpd) to combine "
+        "in a single fPLS-only model (no Bayesian counterpart -- skfda's "
+        "FPLSRegression has no multi-block support, and the Bayesian model "
+        "is single-predictor only). When set, this replaces the normal "
+        "fPLS-vs-Bayesian comparison entirely; --predictor is ignored. Uses "
+        "sklearn.cross_decomposition.PLSRegression on the concatenated "
+        "5-basis-reduced curves (one block per predictor), since that is "
+        "the standard tool for multi-block/multivariate PLS.",
+    )
     return parser.parse_args()
 
 
@@ -845,6 +856,265 @@ def run_drop_years_experiment(args: argparse.Namespace, doy_grid: np.ndarray,
     log.info(f"Saved: {meta_d_path}")
 
 
+# ── Combined multi-predictor fPLS (no Bayesian counterpart) ────────────
+
+def load_cohort_ids_and_yield(cohort: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Minimal loader for the combined-predictor path: cohort row mask,
+    yield_tha, and year. Does not load any predictor matrix (the caller
+    loads whichever reduced files it needs)."""
+    obs_index = pd.read_csv(PROCESSED / "obs_index.csv")
+    yield_df = pd.read_csv(PROCESSED / "olive_yield.csv")
+    if "cohort" not in obs_index.columns:
+        obs_index["cohort"] = DEFAULT_COHORT
+    if "cohort" not in yield_df.columns:
+        yield_df["cohort"] = DEFAULT_COHORT
+    mask = (obs_index["cohort"] == cohort).to_numpy()
+    if mask.sum() == 0:
+        raise ValueError(f"No rows found for cohort='{cohort}' in obs_index.csv.")
+    obs_c = obs_index[mask].reset_index(drop=True)
+    merged = obs_c.merge(
+        yield_df[["cohort", "comarca", "year", "yield_tha"]],
+        on=["cohort", "comarca", "year"], how="left", validate="one_to_one",
+    )
+    missing = merged["yield_tha"].isna().sum()
+    if missing > 0:
+        raise ValueError(f"{missing} rows could not be matched to olive_yield.csv for cohort={cohort}.")
+    y = merged["yield_tha"].to_numpy(dtype=float)
+    years = merged["year"].astype(int).to_numpy()
+    return mask, y, years
+
+
+def combined_pls_loyo_sweep(X: np.ndarray, y: np.ndarray, years: np.ndarray,
+                            k_values: list[int]) -> dict[int, np.ndarray]:
+    """Leave-one-year-out pooled predictions for each k, using plain
+    sklearn PLSRegression on the (already concatenated) design matrix X."""
+    from sklearn.cross_decomposition import PLSRegression
+
+    unique_years = sorted(set(years.tolist()))
+    preds = {k: np.full(len(y), np.nan) for k in k_values}
+    for held_out in unique_years:
+        train_mask = years != held_out
+        test_mask = ~train_mask
+        for k in k_values:
+            model = PLSRegression(n_components=k, scale=True)
+            model.fit(X[train_mask], y[train_mask])
+            preds[k][test_mask] = model.predict(X[test_mask]).ravel()
+    for k in k_values:
+        assert not np.any(np.isnan(preds[k])), f"Missing LOYO predictions for k={k}"
+    return preds
+
+
+def load_single_predictor_reference(cohort: str, predictor: str) -> dict | None:
+    """Opportunistically read the already-computed single-predictor fPLS
+    LOYO row for {cohort, predictor}, for a side-by-side reference in the
+    combined-model output. Returns None if that file doesn't exist yet
+    (e.g. the single-predictor comparison was never run for this predictor)."""
+    path = TABLES / f"fpls_vs_bayesian_loyo_{cohort}_{predictor}.csv"
+    if not path.exists():
+        return None
+    df = pd.read_csv(path)
+    row = df[df["model"] == "fpls"]
+    if row.empty:
+        return None
+    return {
+        "pooled_loyo_rmse": float(row.iloc[0]["pooled_loyo_rmse"]),
+        "pooled_loyo_r2": float(row.iloc[0]["pooled_loyo_r2"]),
+    }
+
+
+def run_combined_fpls(args: argparse.Namespace):
+    """Combine multiple functional predictors in a single fPLS-only model.
+
+    skfda's FPLSRegression has no multi-block support (confirmed against
+    its source: FPLS.fit takes one X of type FDataGrid, FDataBasis, or
+    NDArrayFloat -- never a list of blocks), so this uses
+    sklearn.cross_decomposition.PLSRegression instead, applied to the
+    concatenated 5-basis-reduced curves (one block of 5 columns per
+    predictor, i.e. the same reduced representation Step 7's Bayesian model
+    already uses per predictor). sklearn's PLSRegression is the standard
+    tool for exactly this multi-block/multivariate PLS case; its `scale=True`
+    internally standardizes each column before NIPALS so no single block
+    dominates purely from having larger raw units, and `coef_` is returned
+    already back-transformed to each column's original (reduced-predictor)
+    physical scale (verified: y_hat = (X - x_mean) @ coef_.T + y_mean,
+    regardless of the scale= setting).
+
+    There is no Bayesian counterpart here: the Bayesian model in
+    07_fit_numpyro_main.py fits one functional predictor at a time, and
+    extending it to a joint multi-predictor model is out of scope (per
+    explicit direction -- this is fPLS-only). The headline k is still fixed
+    a priori (--n-components) and the LOYO sweep is still diagnostic-only,
+    for the same selection-leakage reasons as the single-predictor path.
+    """
+    predictors = [p.strip() for p in args.combine_predictors.split(",") if p.strip()]
+    if len(predictors) < 2:
+        raise ValueError("--combine-predictors needs at least two comma-separated predictor names.")
+    for p in predictors:
+        if p not in PREDICTOR_FILES:
+            raise ValueError(f"Unknown predictor '{p}' in --combine-predictors. Choices: {list(PREDICTOR_FILES)}")
+
+    tag = "-".join(predictors)
+    log.info(f"Combined fPLS (no Bayesian counterpart): cohort={args.cohort}, predictors={predictors}")
+
+    doy_grid = np.load(PROCESSED / "doy_grid.npy")
+    B = np.load(PROCESSED / "B_basis.npy")
+    mask, y, years = load_cohort_ids_and_yield(args.cohort)
+    n_obs = len(y)
+    unique_years = sorted(set(years.tolist()))
+    log.info(f"n_obs={n_obs}, n_years={len(unique_years)}: {unique_years}")
+
+    reduced_blocks = []
+    n_basis_each = []
+    for p in predictors:
+        _, reduced_file = PREDICTOR_FILES[p]
+        red = np.load(PROCESSED / reduced_file)[mask]
+        reduced_blocks.append(red)
+        n_basis_each.append(red.shape[1])
+    X_combined = np.hstack(reduced_blocks)
+    log.info(f"Combined design matrix: {X_combined.shape} "
+             f"({', '.join(f'{p}={nb}' for p, nb in zip(predictors, n_basis_each))})")
+
+    from sklearn.cross_decomposition import PLSRegression
+
+    # Diagnostic-only LOYO sweep (selection-optimistic; not used to pick the headline k)
+    max_k = min(args.max_components_sweep, X_combined.shape[1])
+    headline_k = min(args.n_components, X_combined.shape[1])
+    sweep_range = list(range(1, max_k + 1))
+    k_values_for_loyo = sorted(set(sweep_range) | {headline_k})
+    log.info(f"Diagnostic-only LOYO sweep for k in {k_values_for_loyo}...")
+    preds = combined_pls_loyo_sweep(X_combined, y, years, k_values_for_loyo)
+
+    selection_rows = []
+    for k in sweep_range:
+        rmse, r2 = pooled_metrics(y, preds[k])
+        selection_rows.append({
+            "cohort": args.cohort, "predictors": tag, "n_components": k,
+            "pooled_loyo_rmse": rmse, "pooled_loyo_r2": r2,
+            "n_obs": n_obs, "n_folds": len(unique_years),
+            "note": "selection-optimistic / exploratory -- not used to pick the headline model",
+        })
+    selection_df = pd.DataFrame(selection_rows)
+    selection_path = TABLES / f"fpls_combined_component_selection_{args.cohort}_{tag}.csv"
+    selection_df.to_csv(selection_path, index=False)
+    log.info(f"Saved: {selection_path}")
+
+    # Headline (leakage-free, fixed a priori k) vs. each single-predictor baseline
+    headline_rmse, headline_r2 = pooled_metrics(y, preds[headline_k])
+    loyo_rows = [{
+        "cohort": args.cohort, "model": f"fpls_combined[{tag}]", "complexity": f"k={headline_k}",
+        "pooled_loyo_rmse": headline_rmse, "pooled_loyo_r2": headline_r2,
+        "n_obs": n_obs, "n_folds": len(unique_years),
+        "note": "secondary, likely-underpowered diagnostic (~9 folds) -- not the primary result",
+    }]
+    for p in predictors:
+        ref = load_single_predictor_reference(args.cohort, p)
+        if ref is None:
+            log.info(f"No existing single-predictor reference for '{p}' "
+                     f"(run --predictor {p} first to populate it); skipping in the comparison table.")
+            continue
+        loyo_rows.append({
+            "cohort": args.cohort, "model": f"fpls_single[{p}]", "complexity": "k=1 (a priori)",
+            "pooled_loyo_rmse": ref["pooled_loyo_rmse"], "pooled_loyo_r2": ref["pooled_loyo_r2"],
+            "n_obs": n_obs, "n_folds": len(unique_years),
+            "note": "reference from the existing single-predictor comparison, not refit here",
+        })
+    loyo_df = pd.DataFrame(loyo_rows)
+    loyo_path = TABLES / f"fpls_combined_loyo_{args.cohort}_{tag}.csv"
+    loyo_df.to_csv(loyo_path, index=False)
+    log.info(f"Saved: {loyo_path}")
+
+    # Full-data headline fit -> per-predictor beta(t) contributions
+    headline_model = PLSRegression(n_components=headline_k, scale=True)
+    headline_model.fit(X_combined, y)
+    coef_combined = headline_model.coef_.ravel()
+    masks = window_masks(doy_grid)
+    beta_curves: dict[str, np.ndarray] = {}
+    beta_t_data = {"doy": doy_grid}
+    stage_rows = []
+    idx = 0
+    for p, nb in zip(predictors, n_basis_each):
+        coef_p = coef_combined[idx: idx + nb]
+        beta_p_t = B @ coef_p
+        beta_curves[p] = beta_p_t
+        beta_t_data[f"beta_{p}"] = beta_p_t
+        idx += nb
+    beta_t_df = pd.DataFrame(beta_t_data)
+    beta_t_path = TABLES / f"fpls_combined_beta_t_{args.cohort}_{tag}.csv"
+    beta_t_df.to_csv(beta_t_path, index=False)
+    log.info(f"Saved: {beta_t_path}")
+
+    for stage in STAGES_RESOLVED:
+        row = {"stage": stage, "doy_start": STAGES_RESOLVED[stage][0], "doy_end": STAGES_RESOLVED[stage][1]}
+        for p in predictors:
+            row[f"beta_{p}"] = stage_means_point(beta_curves[p], masks)[stage]
+        stage_rows.append(row)
+    contrast_row = {"stage": "S7_minus_S6", "doy_start": None, "doy_end": None}
+    for p in predictors:
+        sm = stage_means_point(beta_curves[p], masks)
+        contrast_row[f"beta_{p}"] = sm["S7"] - sm["S6"]
+    stage_rows.append(contrast_row)
+    stage_df = pd.DataFrame(stage_rows)
+    stage_path = TABLES / f"fpls_combined_stage_means_{args.cohort}_{tag}.csv"
+    stage_df.to_csv(stage_path, index=False)
+    log.info(f"Saved: {stage_path}")
+
+    colors = ["tab:blue", "tab:orange", "tab:green", "tab:red", "tab:purple"]
+    plt.figure(figsize=(10, 5.5))
+    for i, p in enumerate(predictors):
+        disp = PREDICTOR_DISPLAY.get(p, p)
+        plt.plot(doy_grid, beta_curves[p], lw=1.8, color=colors[i % len(colors)],
+                 label=f"beta_{disp}(t)")
+    for stage, (start, end) in STAGES_RESOLVED.items():
+        plt.axvline(start, color="gray", linestyle="--", linewidth=0.6)
+    plt.axhline(0.0, color="gray", linestyle=":", linewidth=0.8)
+    plt.xlabel("DOY")
+    plt.ylabel("beta(t) [per-predictor physical units -- not on a shared scale]")
+    plt.title(f"Combined fPLS (k={headline_k}) per-predictor beta(t) -- {args.cohort} ({tag})")
+    plt.legend(fontsize=8)
+    plt.tight_layout()
+    fig_path = FIGURES / f"fpls_combined_beta_t_{args.cohort}_{tag}.png"
+    plt.savefig(fig_path, dpi=180)
+    plt.close()
+    log.info(f"Saved: {fig_path}")
+
+    meta = {
+        "cohort": args.cohort,
+        "predictors": predictors,
+        "n_basis_per_predictor": dict(zip(predictors, n_basis_each)),
+        "headline_n_components": headline_k,
+        "n_obs": n_obs,
+        "n_folds": len(unique_years),
+        "tool": "sklearn.cross_decomposition.PLSRegression(scale=True) on concatenated "
+                "5-basis-reduced predictor blocks; skfda's FPLSRegression has no "
+                "multi-block support (verified against its source).",
+        "caveats": [
+            "No Bayesian counterpart: the Bayesian model is single-predictor only; this "
+            "combined result is fPLS-only, not a triangulation against a second estimator.",
+            "Headline k is fixed a priori and independent of the LOYO sweep (same "
+            "selection-leakage avoidance as the single-predictor comparison).",
+            "Combining predictors increases in-sample flexibility roughly mechanically; "
+            "it does not by itself fix the small-n (~9 independent years) LOYO ceiling "
+            "seen throughout this comparison -- check the loyo table below before "
+            "concluding the combination helped.",
+            "Per-predictor beta(t) curves are NOT on a shared physical scale (see the "
+            "stage_means table's separate beta_{predictor} columns) -- compare shape/sign "
+            "within a predictor across stages, not magnitude across predictors.",
+        ],
+        "outputs": {
+            "component_selection_csv": str(selection_path),
+            "loyo_csv": str(loyo_path),
+            "beta_t_csv": str(beta_t_path),
+            "stage_means_csv": str(stage_path),
+            "beta_t_png": str(fig_path),
+        },
+    }
+    meta_path = TABLES / f"fpls_combined_meta_{args.cohort}_{tag}.json"
+    with open(meta_path, "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=2)
+    log.info(f"Saved: {meta_path}")
+    log.info("Done (combined fPLS).")
+
+
 # ── Main ─────────────────────────────────────────────────────────────────
 
 def main():
@@ -852,6 +1122,10 @@ def main():
     TABLES.mkdir(parents=True, exist_ok=True)
     FIGURES.mkdir(parents=True, exist_ok=True)
     POSTERIORS.mkdir(parents=True, exist_ok=True)
+
+    if args.combine_predictors:
+        run_combined_fpls(args)
+        return
 
     log.info(f"Loading cohort data: cohort={args.cohort}, predictor={args.predictor}")
     data = load_cohort_data(args.cohort, args.predictor)

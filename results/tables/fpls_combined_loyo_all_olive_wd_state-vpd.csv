@@ -1,0 +1,4 @@
+cohort,model,complexity,pooled_loyo_rmse,pooled_loyo_r2,n_obs,n_folds,note
+all_olive,fpls_combined[wd_state-vpd],k=1,0.4325611947381571,-0.0892269628266058,162,9,"secondary, likely-underpowered diagnostic (~9 folds) -- not the primary result"
+all_olive,fpls_single[wd_state],k=1 (a priori),0.4345520804764772,-0.0992764856742982,162,9,"reference from the existing single-predictor comparison, not refit here"
+all_olive,fpls_single[vpd],k=1 (a priori),0.4989047859396593,-0.4489673896290493,162,9,"reference from the existing single-predictor comparison, not refit here"

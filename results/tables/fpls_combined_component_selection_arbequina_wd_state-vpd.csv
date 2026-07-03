@@ -1,0 +1,6 @@
+cohort,predictors,n_components,pooled_loyo_rmse,pooled_loyo_r2,n_obs,n_folds,note
+arbequina,wd_state-vpd,1,0.46519818213134356,-0.11611491081652936,90,9,selection-optimistic / exploratory -- not used to pick the headline model
+arbequina,wd_state-vpd,2,0.4723647624009784,-0.15076826649398556,90,9,selection-optimistic / exploratory -- not used to pick the headline model
+arbequina,wd_state-vpd,3,0.4826936478038711,-0.2016446561183205,90,9,selection-optimistic / exploratory -- not used to pick the headline model
+arbequina,wd_state-vpd,4,0.4983523945139291,-0.28087276350279766,90,9,selection-optimistic / exploratory -- not used to pick the headline model
+arbequina,wd_state-vpd,5,0.5329403188534253,-0.4648395159220102,90,9,selection-optimistic / exploratory -- not used to pick the headline model
