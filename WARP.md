@@ -56,6 +56,7 @@ catalonia/
     tau_sensitivity_sweep.py          # Olive pipeline — tau (memory timescale) sensitivity sweep for S_pre
     plot_beta_t_comparison.py         # Olive pipeline — β(t) posterior curves across cohorts (calendar axis)
     plot_stage_posteriors.py          # Olive pipeline — per-stage β KDE + S7-referenced contrasts
+    fetch_dun_crops.py                # Multi-crop DUN parcel extraction + AgERA5 grid-cell spatial join
     utils/config.py                   # Shared config for olive pipeline
     utils/splines.py                  # B-spline basis construction
   figures/
@@ -397,6 +398,64 @@ See `olive_water_sensitivity_plan.md` for the current olive analysis methodology
 (hierarchical Bayesian scalar-on-function regression). Prior sliding-window OLS analyses
 are archived under `archive/rolling_window/`.
 
+## Multi-Crop DUN Parcel Data
+
+Beyond olive, parcel-level DUN data has been extracted and spatially joined to the
+AgERA5 grid for wine grape, almond, hazelnut, cherry, peach, flat peach, corn, oats,
+soft wheat, durum wheat, and soybean, via `src/fetch_dun_crops.py`. This uses the same
+source as `data/dun/olives.csv` — the Catalan open-data portal
+(`analisi.transparenciacatalunya.cat`), dataset **"Parcel·les i cultius de les
+explotacions (DUN)"** (id `uwe8-jqcu`) — queried directly over its SODA API rather than
+a manual browser download. Each parcel row has individual geometry, farm ID (`id_exp`),
+parcel ID (`id_rec`), net area, irrigation regime (`S`=secà/rainfed, `R`=regadiu/irrigated),
+and cultivar variety (`nvar`).
+
+```bash
+python src/fetch_dun_crops.py --crop vinya              # single crop, default years
+python src/fetch_dun_crops.py --crop blat_de_moro --years 2023,2024,2025
+python src/fetch_dun_crops.py --all                      # all registered crops
+```
+
+**Campaign year handling:** perennial crops (grape, almond, hazelnut, cherry, peach,
+flat peach) default to campaign 2024 only, matching the existing olive convention
+(area/cultivar mix is ~static year to year for perennials). Annual crops (corn, oats,
+wheat, soybean) default to fetching **all three available campaigns (2023–2025)**,
+since their sown area genuinely rotates year to year — a single-year snapshot could be
+an unrepresentative fluke. Corn and soybean showed real multi-year volatility (corn
+7,279–19,307 ha, soybean 130–335 ha across 2023–2025); wheat and oats were comparatively
+stable (±6–20%).
+
+**Crops covered** (slug used in filenames, DUN `nprod` value(s), years fetched):
+
+| Crop | slug | nprod value(s) | Years |
+|---|---|---|---|
+| Wine grape | `vinya` | VINYA | 2024 |
+| Almond | `ametller` | AMETLLER | 2024 |
+| Hazelnut | `avellaner` | AVELLANER | 2024 |
+| Cherry | `cirerer` | CIRERER | 2024 |
+| Peach | `presseguer` | PRESSEGUER | 2024 |
+| Flat peach | `pressec_pla` | PRÉSSEC PLA | 2024 |
+| Corn | `blat_de_moro` | BLAT DE MORO | 2023–2025 |
+| Oats | `civada` | CIVADA | 2023–2025 |
+| Soft wheat | `blat_tou` | BLAT TOU | 2023–2025 |
+| Durum wheat | `blat_dur` | BLAT DUR | 2023–2025 |
+| Soybean | `soia` | SOIA | 2023–2025 |
+| Cotton | `coto` | COTÓ | n/a — 0 rows in 2024, negligible/not grown in Catalonia |
+
+For each crop, two output files:
+- `data/dun/{slug}.csv` — raw parcel extract (geometry, comarca, area, regime, cultivar,
+  farm/parcel IDs), all fetched years combined with a `campanya` column. Large
+  (hundreds of MB for the bigger crops, e.g. `blat_tou.csv` ≈ 690 MB across 3 years) and
+  **gitignored**, like `olives.csv` — regenerate with `fetch_dun_crops.py`.
+- `data/dun/{slug}_dun_grid_cells.csv` (single year) or
+  `data/dun/{slug}_dun_grid_cells_{year}.csv` (multi-year) — parcel centroids assigned
+  to the nearest AgERA5 grid cell and aggregated by regime, same schema as the existing
+  `data/dun/olive_dun_grid_cells_2024.csv`: `lat_idx, lon_idx, cell_lat, cell_lon,
+  area_ha_R, area_ha_S, n_parcels_R, n_parcels_S, total_ha, rainfed_frac`. Small, tracked.
+
+The processed (grid-cell) tables for every crop/year are additionally bundled at
+`data/dun/archive/dun_grid_cells_YYYYMMDD.tar.gz` for convenience.
+
 ## Olive pipeline status (May 2026)
 The olive scalar-on-function pipeline uses fixed calendar windows anchored to
 observed Arbequina phenology in Garrido et al. 2021 (*Forests* 12:204).
@@ -485,6 +544,9 @@ the monotone β(t) shape (S_pre positive, S7 near zero) was preserved across all
 | `data/comarca_olive_elevation_correction_oliveweighted.csv` | Per-comarca residual lapse offset (olive-area-weighted z_climate) |
 | `data/dun/comarca_arbequina_whitelist.csv` | 10 comarques where Arbequina is ≥90% of rainfed olive area AND ≥500 ha (headline cultivar subset) |
 | `data/dun/comarca_all_olive_whitelist.csv` | Legacy 20-comarca dominance whitelist — superseded by `--min-rainfed-ha 500` in `01_load_data.py` |
+| `data/dun/{crop}.csv` | Raw DUN parcel extracts, one per crop (vinya, ametller, avellaner, cirerer, presseguer, pressec_pla, blat_de_moro, civada, blat_tou, blat_dur, soia) — see Multi-Crop DUN Parcel Data; gitignored |
+| `data/dun/{crop}_dun_grid_cells[_YYYY].csv` | Per-crop AgERA5 grid-cell area weights, same schema as `olive_dun_grid_cells_2024.csv` |
+| `data/dun/archive/dun_grid_cells_YYYYMMDD.tar.gz` | Bundled archive of all processed grid-cell weight tables (all crops/years) |
 | `data/agera5_seasonal_catalonia.csv` | Seasonal aggregates per comarca × crop × year |
 | `data/catalan_woody_yield_climate.csv` | Final joined dataset |
 | `data/olive_groves_catalonia.gpkg` | Olive farm polygons with elevation, grid matching, corrected temperatures |

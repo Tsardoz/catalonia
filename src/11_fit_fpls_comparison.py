@@ -62,6 +62,24 @@ Outputs (tag = "drop" + dropped years, e.g. "drop2018-2024"):
 Caveat: dropping years further reduces an already-small n (approx 9 -> 7 for
 the default 2018,2024 drop), so this is a qualitative sign-recovery check,
 not a precision estimate.
+
+Optional lag-yield check (--check-lag-yield):
+Re-adds lag_yield to both estimators for --predictor (default wd_state) and
+compares against the existing no-lag-yield references written by the normal
+comparison (run that first for the same --cohort/--predictor). fPLS side
+delegates to --combine-predictors' machinery with lag_yield as a raw scalar
+pseudo-predictor (a single column, not a functional curve -- it is never
+run through the B-spline basis). Bayesian side reruns
+07_fit_numpyro_main.py with --no-year-re but WITHOUT --no-lag-yield, i.e.
+its own native lag_coef term. Replaces the normal comparison entirely, like
+--combine-predictors.
+Outputs:
+  - results/tables/fpls_combined_loyo_{cohort}_{predictor}-lag_yield.csv (fPLS side)
+  - results/tables/fpls_combined_beta_t_{cohort}_{predictor}-lag_yield.csv (fPLS side)
+  - results/tables/fpls_combined_stage_means_{cohort}_{predictor}-lag_yield.csv (fPLS side)
+  - results/tables/fpls_lagyield_check_loyo_{cohort}_{predictor}.csv
+  - results/tables/fpls_lagyield_check_bayesian_stage_means_{cohort}_{predictor}.csv
+  - results/tables/fpls_lagyield_check_meta_{cohort}_{predictor}.json
 """
 import argparse
 import json
@@ -100,8 +118,14 @@ PREDICTOR_FILES = {
     "tmax": ("TMAX_matrix.npy", "TMAX_reduced.npy"),
 }
 PREDICTOR_DISPLAY = {
-    "wd_state": "CWB-state", "wd": "CWB", "wd30": "CWB-30d", "wd_bucket": "CWB-bucket",
-    "vpd": "VPD", "tmin": "Tmin", "tmax": "Tmax",
+    "wd_state": "Water balance (CWB-state)",
+    "wd": "Water balance (CWB)",
+    "wd30": "Water balance (CWB-30d)",
+    "wd_bucket": "Water balance (soil bucket)",
+    "vpd": "Vapor pressure deficit (VPD)",
+    "tmin": "Min. temperature (Tmin)",
+    "tmax": "Max. temperature (Tmax)",
+    "lag_yield": "Lag yield",
 }
 
 
@@ -168,7 +192,18 @@ def parse_args() -> argparse.Namespace:
         "fPLS-vs-Bayesian comparison entirely; --predictor is ignored. Uses "
         "sklearn.cross_decomposition.PLSRegression on the concatenated "
         "5-basis-reduced curves (one block per predictor), since that is "
-        "the standard tool for multi-block/multivariate PLS.",
+        "the standard tool for multi-block/multivariate PLS. 'lag_yield' is "
+        "a valid pseudo-predictor here (a single scalar column, not a "
+        "functional curve).",
+    )
+    parser.add_argument(
+        "--check-lag-yield", action="store_true",
+        help="Re-add lag_yield to both estimators for --predictor (default "
+        "wd_state) and compare against the existing no-lag-yield references: "
+        "fPLS via --combine-predictors {predictor},lag_yield (sklearn "
+        "PLSRegression), and Bayesian via 07_fit_numpyro_main.py with "
+        "--no-year-re but WITHOUT --no-lag-yield. Replaces the normal "
+        "comparison entirely, like --combine-predictors.",
     )
     return parser.parse_args()
 
@@ -319,6 +354,95 @@ def predict_bayesian(X_reduced_rows: np.ndarray, alpha_mean: float,
     training-time standardized computation alpha + Xz @ beta_std, since
     beta_phys = beta_std / x_sd and Xz = (X - x_mean) / x_sd."""
     return alpha_mean + (X_reduced_rows - x_mean[None, :]) @ beta_phys_mean
+
+
+def bayesian_lagyield_stem(cohort: str, predictor: str, exclude_year: int | None, run_tag: str) -> str:
+    """Stem for the lag_yield-enabled Bayesian baseline. Matches what
+    07_fit_numpyro_main.py itself produces for --no-year-re without
+    --no-lag-yield (no '_nolagyield' suffix, since lag_yield stays on)."""
+    stem = f"numpyro_main_{cohort}_{predictor}_noyearre"
+    if exclude_year is not None:
+        stem += f"_excl{int(exclude_year)}"
+    if run_tag:
+        stem += f"_{run_tag}"
+    return stem
+
+
+def run_bayesian_fit_lagyield(args: argparse.Namespace, exclude_year: int | None) -> str:
+    """Run (or reuse) the Bayesian baseline with --no-year-re but WITHOUT
+    --no-lag-yield, i.e. the model's own native lag_coef term stays active.
+    Used by --check-lag-yield; separate from run_bayesian_fit (which always
+    passes --no-lag-yield) so the existing no-lag-yield comparison path is
+    untouched."""
+    stem = bayesian_lagyield_stem(args.cohort, args.predictor, exclude_year, args.run_tag)
+    beta_t_path = POSTERIORS / f"{stem}_beta_t_draws.npy"
+    if args.reuse_existing and beta_t_path.exists():
+        log.info(f"Reusing existing Bayesian lag-yield artifacts: stem={stem}")
+        return stem
+
+    cmd = [
+        sys.executable, STEP7_PATH,
+        "--cohort", args.cohort,
+        "--predictor", args.predictor,
+        "--no-year-re",
+        "--draws", str(args.draws),
+        "--tune", str(args.tune),
+        "--chains", str(args.chains),
+        "--chain-method", args.chain_method,
+        "--seed", str(args.seed),
+        "--target-accept", str(args.target_accept),
+        "--hdi-prob", str(args.hdi_prob),
+    ]
+    if exclude_year is not None:
+        cmd.extend(["--exclude-year", str(int(exclude_year))])
+    if args.run_tag:
+        cmd.extend(["--stem-suffix", args.run_tag])
+
+    log.info(f"Running Bayesian lag-yield fit (stem={stem})...")
+    subprocess.run(cmd, check=True)
+    return stem
+
+
+def load_bayesian_predict_params_lagyield(stem: str) -> tuple[float, float, np.ndarray, np.ndarray]:
+    """Return (alpha_mean, lag_coef_mean, beta_phys_mean, x_mean) for
+    posterior-mean prediction from a lag_yield-enabled fit."""
+    import arviz as az
+
+    idata = az.from_netcdf(POSTERIORS / f"{stem}.nc")
+    alpha_mean = float(idata.posterior["alpha"].values.mean())
+    lag_coef_mean = float(idata.posterior["lag_coef"].values.mean())
+    beta_phys = np.load(POSTERIORS / f"{stem}_beta_coefs_phys.npy")
+    beta_phys_mean = beta_phys.mean(axis=0)
+    x_mean = np.load(POSTERIORS / f"{stem}_x_mean.npy")
+    return alpha_mean, lag_coef_mean, beta_phys_mean, x_mean
+
+
+def predict_bayesian_lagyield(X_reduced_rows: np.ndarray, lag_yield_rows: np.ndarray,
+                              alpha_mean: float, lag_coef_mean: float,
+                              beta_phys_mean: np.ndarray, x_mean: np.ndarray) -> np.ndarray:
+    """Same functional-effect prediction as predict_bayesian, plus the
+    model's own lag_coef * lag_yield term."""
+    return (
+        alpha_mean
+        + (X_reduced_rows - x_mean[None, :]) @ beta_phys_mean
+        + lag_coef_mean * lag_yield_rows
+    )
+
+
+def bayesian_loyo_lagyield(args: argparse.Namespace, X_reduced: np.ndarray, lag_yield: np.ndarray,
+                          y: np.ndarray, years: np.ndarray) -> np.ndarray:
+    unique_years = sorted(set(years.tolist()))
+    preds = np.full(len(y), np.nan)
+    for held_out in unique_years:
+        stem = run_bayesian_fit_lagyield(args, exclude_year=held_out)
+        alpha_mean, lag_coef_mean, beta_phys_mean, x_mean = load_bayesian_predict_params_lagyield(stem)
+        test_mask = years == held_out
+        preds[test_mask] = predict_bayesian_lagyield(
+            X_reduced[test_mask], lag_yield[test_mask],
+            alpha_mean, lag_coef_mean, beta_phys_mean, x_mean,
+        )
+    assert not np.any(np.isnan(preds)), "Missing Bayesian lag-yield LOYO predictions"
+    return preds
 
 
 # ── fPLS ─────────────────────────────────────────────────────────────────
@@ -858,10 +982,24 @@ def run_drop_years_experiment(args: argparse.Namespace, doy_grid: np.ndarray,
 
 # ── Combined multi-predictor fPLS (no Bayesian counterpart) ────────────
 
-def load_cohort_ids_and_yield(cohort: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def load_predictor_block(p: str, mask: np.ndarray, lag_yield: np.ndarray) -> np.ndarray:
+    """Return the (n_obs, k) design block for predictor name p, masked to
+    the requested cohort's rows. Functional predictors (wd_state, vpd, ...)
+    are loaded from their pre-computed 5-basis reduced .npy file (k=N_BASIS).
+    'lag_yield' is a single raw scalar column (k=1) -- a comarca-year lagged
+    yield value, not a functional curve, so it is never run through the
+    B-spline basis reduction."""
+    if p == "lag_yield":
+        return lag_yield.reshape(-1, 1)
+    _, reduced_file = PREDICTOR_FILES[p]
+    return np.load(PROCESSED / reduced_file)[mask]
+
+
+def load_cohort_ids_and_yield(cohort: str) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Minimal loader for the combined-predictor path: cohort row mask,
-    yield_tha, and year. Does not load any predictor matrix (the caller
-    loads whichever reduced files it needs)."""
+    yield_tha, year, and lag_yield. Does not load any functional predictor
+    matrix (the caller loads whichever reduced files it needs via
+    load_predictor_block)."""
     obs_index = pd.read_csv(PROCESSED / "obs_index.csv")
     yield_df = pd.read_csv(PROCESSED / "olive_yield.csv")
     if "cohort" not in obs_index.columns:
@@ -873,7 +1011,7 @@ def load_cohort_ids_and_yield(cohort: str) -> tuple[np.ndarray, np.ndarray, np.n
         raise ValueError(f"No rows found for cohort='{cohort}' in obs_index.csv.")
     obs_c = obs_index[mask].reset_index(drop=True)
     merged = obs_c.merge(
-        yield_df[["cohort", "comarca", "year", "yield_tha"]],
+        yield_df[["cohort", "comarca", "year", "yield_tha", "lag_yield"]],
         on=["cohort", "comarca", "year"], how="left", validate="one_to_one",
     )
     missing = merged["yield_tha"].isna().sum()
@@ -881,7 +1019,8 @@ def load_cohort_ids_and_yield(cohort: str) -> tuple[np.ndarray, np.ndarray, np.n
         raise ValueError(f"{missing} rows could not be matched to olive_yield.csv for cohort={cohort}.")
     y = merged["yield_tha"].to_numpy(dtype=float)
     years = merged["year"].astype(int).to_numpy()
-    return mask, y, years
+    lag_yield = merged["lag_yield"].to_numpy(dtype=float)
+    return mask, y, years, lag_yield
 
 
 def combined_pls_loyo_sweep(X: np.ndarray, y: np.ndarray, years: np.ndarray,
@@ -950,15 +1089,18 @@ def run_combined_fpls(args: argparse.Namespace):
     if len(predictors) < 2:
         raise ValueError("--combine-predictors needs at least two comma-separated predictor names.")
     for p in predictors:
-        if p not in PREDICTOR_FILES:
-            raise ValueError(f"Unknown predictor '{p}' in --combine-predictors. Choices: {list(PREDICTOR_FILES)}")
+        if p != "lag_yield" and p not in PREDICTOR_FILES:
+            raise ValueError(
+                f"Unknown predictor '{p}' in --combine-predictors. "
+                f"Choices: {list(PREDICTOR_FILES) + ['lag_yield']}"
+            )
 
     tag = "-".join(predictors)
     log.info(f"Combined fPLS (no Bayesian counterpart): cohort={args.cohort}, predictors={predictors}")
 
     doy_grid = np.load(PROCESSED / "doy_grid.npy")
     B = np.load(PROCESSED / "B_basis.npy")
-    mask, y, years = load_cohort_ids_and_yield(args.cohort)
+    mask, y, years, lag_yield = load_cohort_ids_and_yield(args.cohort)
     n_obs = len(y)
     unique_years = sorted(set(years.tolist()))
     log.info(f"n_obs={n_obs}, n_years={len(unique_years)}: {unique_years}")
@@ -966,8 +1108,7 @@ def run_combined_fpls(args: argparse.Namespace):
     reduced_blocks = []
     n_basis_each = []
     for p in predictors:
-        _, reduced_file = PREDICTOR_FILES[p]
-        red = np.load(PROCESSED / reduced_file)[mask]
+        red = load_predictor_block(p, mask, lag_yield)
         reduced_blocks.append(red)
         n_basis_each.append(red.shape[1])
     X_combined = np.hstack(reduced_blocks)
@@ -1029,14 +1170,18 @@ def run_combined_fpls(args: argparse.Namespace):
     coef_combined = headline_model.coef_.ravel()
     masks = window_masks(doy_grid)
     beta_curves: dict[str, np.ndarray] = {}
+    scalar_coefs: dict[str, float] = {}
     beta_t_data = {"doy": doy_grid}
     stage_rows = []
     idx = 0
     for p, nb in zip(predictors, n_basis_each):
         coef_p = coef_combined[idx: idx + nb]
-        beta_p_t = B @ coef_p
-        beta_curves[p] = beta_p_t
-        beta_t_data[f"beta_{p}"] = beta_p_t
+        if p == "lag_yield":
+            scalar_coefs[p] = float(coef_p[0])
+        else:
+            beta_p_t = B @ coef_p
+            beta_curves[p] = beta_p_t
+            beta_t_data[f"beta_{p}"] = beta_p_t
         idx += nb
     beta_t_df = pd.DataFrame(beta_t_data)
     beta_t_path = TABLES / f"fpls_combined_beta_t_{args.cohort}_{tag}.csv"
@@ -1046,13 +1191,22 @@ def run_combined_fpls(args: argparse.Namespace):
     for stage in STAGES_RESOLVED:
         row = {"stage": stage, "doy_start": STAGES_RESOLVED[stage][0], "doy_end": STAGES_RESOLVED[stage][1]}
         for p in predictors:
+            if p in scalar_coefs:
+                continue
             row[f"beta_{p}"] = stage_means_point(beta_curves[p], masks)[stage]
         stage_rows.append(row)
     contrast_row = {"stage": "S7_minus_S6", "doy_start": None, "doy_end": None}
     for p in predictors:
+        if p in scalar_coefs:
+            continue
         sm = stage_means_point(beta_curves[p], masks)
         contrast_row[f"beta_{p}"] = sm["S7"] - sm["S6"]
     stage_rows.append(contrast_row)
+    if scalar_coefs:
+        stage_rows.append({
+            "stage": "scalar_coefficients", "doy_start": None, "doy_end": None,
+            **{f"beta_{p}": v for p, v in scalar_coefs.items()},
+        })
     stage_df = pd.DataFrame(stage_rows)
     stage_path = TABLES / f"fpls_combined_stage_means_{args.cohort}_{tag}.csv"
     stage_df.to_csv(stage_path, index=False)
@@ -1060,10 +1214,14 @@ def run_combined_fpls(args: argparse.Namespace):
 
     colors = ["tab:blue", "tab:orange", "tab:green", "tab:red", "tab:purple"]
     plt.figure(figsize=(10, 5.5))
-    for i, p in enumerate(predictors):
+    plot_i = 0
+    for p in predictors:
+        if p in scalar_coefs:
+            continue
         disp = PREDICTOR_DISPLAY.get(p, p)
-        plt.plot(doy_grid, beta_curves[p], lw=1.8, color=colors[i % len(colors)],
+        plt.plot(doy_grid, beta_curves[p], lw=1.8, color=colors[plot_i % len(colors)],
                  label=f"beta_{disp}(t)")
+        plot_i += 1
     for stage, (start, end) in STAGES_RESOLVED.items():
         plt.axvline(start, color="gray", linestyle="--", linewidth=0.6)
     plt.axhline(0.0, color="gray", linestyle=":", linewidth=0.8)
@@ -1084,6 +1242,7 @@ def run_combined_fpls(args: argparse.Namespace):
         "headline_n_components": headline_k,
         "n_obs": n_obs,
         "n_folds": len(unique_years),
+        "scalar_predictor_coefficients": scalar_coefs,
         "tool": "sklearn.cross_decomposition.PLSRegression(scale=True) on concatenated "
                 "5-basis-reduced predictor blocks; skfda's FPLSRegression has no "
                 "multi-block support (verified against its source).",
@@ -1099,6 +1258,10 @@ def run_combined_fpls(args: argparse.Namespace):
             "Per-predictor beta(t) curves are NOT on a shared physical scale (see the "
             "stage_means table's separate beta_{predictor} columns) -- compare shape/sign "
             "within a predictor across stages, not magnitude across predictors.",
+            "Scalar (non-functional) predictors like lag_yield contribute a single "
+            "coefficient sharing the same PLS component budget, not a beta(t) curve; "
+            "they are reported in scalar_predictor_coefficients / the "
+            "'scalar_coefficients' stage row, and are not plotted against DOY.",
         ],
         "outputs": {
             "component_selection_csv": str(selection_path),
@@ -1115,6 +1278,171 @@ def run_combined_fpls(args: argparse.Namespace):
     log.info("Done (combined fPLS).")
 
 
+# ── Lag-yield check (both estimators, native handling) ──────────────────
+
+def run_check_lag_yield(args: argparse.Namespace):
+    """Re-add lag_yield to both estimators for --predictor and compare
+    against the existing no-lag-yield references.
+
+    fPLS side: delegates to run_combined_fpls with
+    predictors=[predictor, "lag_yield"] (lag_yield enters as a raw scalar
+    column via load_predictor_block, not a functional curve), producing the
+    standard fpls_combined_{cohort}_{predictor}-lag_yield.* artifact set.
+
+    Bayesian side: reruns 07_fit_numpyro_main.py with --no-year-re but
+    WITHOUT --no-lag-yield, i.e. the model's own native lag_coef term, for
+    the full-data fit and each LOYO fold.
+
+    The two sides handle lag_yield very differently (fPLS shares one PLS
+    component budget across it and the functional predictor; the Bayesian
+    model gives it an independent linear coefficient), so this is a
+    structural comparison, not just an "does lag help" score.
+    """
+    predictor = args.predictor
+    log.info(f"Check lag-yield: cohort={args.cohort}, predictor={predictor}")
+
+    # fPLS side: reuse the combined-predictor path (lag_yield as a scalar
+    # pseudo-predictor). Uses a copied Namespace so args.combine_predictors
+    # on the caller's args is left untouched.
+    combine_args = argparse.Namespace(**vars(args))
+    combine_args.combine_predictors = f"{predictor},lag_yield"
+    run_combined_fpls(combine_args)
+    tag = f"{predictor}-lag_yield"
+    fpls_loyo_path = TABLES / f"fpls_combined_loyo_{args.cohort}_{tag}.csv"
+    fpls_row = pd.read_csv(fpls_loyo_path).iloc[0].to_dict()
+
+    # Bayesian side: native lag_coef term, --no-year-re, lag_yield ON.
+    doy_grid = np.load(PROCESSED / "doy_grid.npy")
+    data = load_cohort_data(args.cohort, predictor)
+    X_reduced, y, years = data["X_reduced"], data["y"], data["years"]
+    lag_yield = data["obs"]["lag_yield"].to_numpy(dtype=float)
+    n_obs = len(y)
+    unique_years = sorted(set(years.tolist()))
+    log.info(f"n_obs={n_obs}, n_years={len(unique_years)}: {unique_years}")
+
+    log.info("Bayesian +lag_yield full-data fit (--no-year-re, lag_yield ON)...")
+    full_stem = run_bayesian_fit_lagyield(args, exclude_year=None)
+    bayes_beta_t = np.load(POSTERIORS / f"{full_stem}_beta_t_draws.npy")
+
+    import arviz as az
+    idata_full = az.from_netcdf(POSTERIORS / f"{full_stem}.nc")
+    lag_coef_draws = idata_full.posterior["lag_coef"].values.ravel()
+
+    log.info("Bayesian +lag_yield LOYO folds...")
+    bayes_preds = bayesian_loyo_lagyield(args, X_reduced, lag_yield, y, years)
+    bayes_rmse, bayes_r2 = pooled_metrics(y, bayes_preds)
+
+    # No-lag-yield references, if the normal comparison has already been run
+    # for this cohort/predictor.
+    ref_path = TABLES / f"fpls_vs_bayesian_loyo_{args.cohort}_{predictor}.csv"
+    ref_rows = {}
+    if ref_path.exists():
+        ref_df = pd.read_csv(ref_path)
+        for _, r in ref_df.iterrows():
+            ref_rows[r["model"]] = {
+                "pooled_loyo_rmse": float(r["pooled_loyo_rmse"]),
+                "pooled_loyo_r2": float(r["pooled_loyo_r2"]),
+            }
+    else:
+        log.info(
+            f"No existing no-lag-yield reference at {ref_path} (run the "
+            "normal comparison for this cohort/predictor first to populate it)."
+        )
+
+    loyo_rows = [
+        {
+            "cohort": args.cohort, "predictor": predictor,
+            "model": "fpls_plus_lag_yield", "complexity": fpls_row.get("complexity", ""),
+            "pooled_loyo_rmse": fpls_row["pooled_loyo_rmse"], "pooled_loyo_r2": fpls_row["pooled_loyo_r2"],
+            "n_obs": n_obs, "n_folds": len(unique_years),
+            "note": "fPLS treats lag_yield as a raw scalar column sharing the same "
+                    "PLS component budget as the functional predictor",
+        },
+        {
+            "cohort": args.cohort, "predictor": predictor,
+            "model": "bayesian_plus_lag_yield", "complexity": "RW2 + native lag_coef term",
+            "pooled_loyo_rmse": bayes_rmse, "pooled_loyo_r2": bayes_r2,
+            "n_obs": n_obs, "n_folds": len(unique_years),
+            "note": "Bayesian model's own linear lag_coef term (production Step 7 spec, minus the year RE)",
+        },
+    ]
+    for model_name, ref in ref_rows.items():
+        loyo_rows.append({
+            "cohort": args.cohort, "predictor": predictor,
+            "model": f"{model_name}_no_lag_yield_reference", "complexity": "reference (no lag_yield)",
+            "pooled_loyo_rmse": ref["pooled_loyo_rmse"], "pooled_loyo_r2": ref["pooled_loyo_r2"],
+            "n_obs": n_obs, "n_folds": len(unique_years),
+            "note": "reference row copied from the existing no-lag-yield comparison, not refit here",
+        })
+    loyo_df = pd.DataFrame(loyo_rows)
+    loyo_path = TABLES / f"fpls_lagyield_check_loyo_{args.cohort}_{predictor}.csv"
+    loyo_df.to_csv(loyo_path, index=False)
+    log.info(f"Saved: {loyo_path}")
+
+    masks = window_masks(doy_grid)
+    bayes_stage_draws = stage_means_draws(bayes_beta_t, masks)
+    bayes_contrast_draws = bayes_stage_draws["S7"] - bayes_stage_draws["S6"]
+    stage_rows = []
+    for stage in STAGES_RESOLVED:
+        stage_rows.append({
+            "stage": stage,
+            "beta_bayesian_plus_lag_median": float(np.median(bayes_stage_draws[stage])),
+            "beta_bayesian_plus_lag_q05": float(np.quantile(bayes_stage_draws[stage], 0.05)),
+            "beta_bayesian_plus_lag_q95": float(np.quantile(bayes_stage_draws[stage], 0.95)),
+        })
+    stage_rows.append({
+        "stage": "S7_minus_S6",
+        "beta_bayesian_plus_lag_median": float(np.median(bayes_contrast_draws)),
+        "beta_bayesian_plus_lag_q05": float(np.quantile(bayes_contrast_draws, 0.05)),
+        "beta_bayesian_plus_lag_q95": float(np.quantile(bayes_contrast_draws, 0.95)),
+    })
+    stage_df = pd.DataFrame(stage_rows)
+    stage_path = TABLES / f"fpls_lagyield_check_bayesian_stage_means_{args.cohort}_{predictor}.csv"
+    stage_df.to_csv(stage_path, index=False)
+    log.info(f"Saved: {stage_path}")
+
+    meta = {
+        "cohort": args.cohort,
+        "predictor": predictor,
+        "n_obs": n_obs,
+        "n_folds": len(unique_years),
+        "lag_coef_bayesian": {
+            "median": float(np.median(lag_coef_draws)),
+            "q05": float(np.quantile(lag_coef_draws, 0.05)),
+            "q95": float(np.quantile(lag_coef_draws, 0.95)),
+        },
+        "bayesian_stem_full": full_stem,
+        "fpls_combined_tag": tag,
+        "caveats": [
+            "fPLS and the Bayesian model treat lag_yield structurally "
+            "differently: fPLS folds it into the same PLS component budget "
+            "as the functional predictor's basis columns (see the "
+            f"fpls_combined_* outputs for predictors={tag}); the Bayesian "
+            "model gives it its own independent linear coefficient "
+            "(lag_coef) alongside the RW2 smoother. A difference in "
+            "behavior between the two may reflect this structural "
+            "difference, not just whether lag_yield helps.",
+            "lag_yield has previously been found near-inert in Bambi sanity "
+            "checks at comarca-level aggregation (06_fit_bambi_sanity.py) -- "
+            "a small or CI-spanning-zero lag_coef here is consistent with that.",
+            "~9 LOYO folds means pooled RMSE is a noisy, underpowered "
+            "estimator for both sides of this comparison.",
+        ],
+        "outputs": {
+            "loyo_csv": str(loyo_path),
+            "bayesian_stage_means_csv": str(stage_path),
+            "fpls_combined_loyo_csv": str(fpls_loyo_path),
+            "fpls_combined_beta_t_csv": str(TABLES / f"fpls_combined_beta_t_{args.cohort}_{tag}.csv"),
+            "fpls_combined_stage_means_csv": str(TABLES / f"fpls_combined_stage_means_{args.cohort}_{tag}.csv"),
+        },
+    }
+    meta_path = TABLES / f"fpls_lagyield_check_meta_{args.cohort}_{predictor}.json"
+    with open(meta_path, "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=2)
+    log.info(f"Saved: {meta_path}")
+    log.info("Done (check-lag-yield).")
+
+
 # ── Main ─────────────────────────────────────────────────────────────────
 
 def main():
@@ -1125,6 +1453,10 @@ def main():
 
     if args.combine_predictors:
         run_combined_fpls(args)
+        return
+
+    if args.check_lag_yield:
+        run_check_lag_yield(args)
         return
 
     log.info(f"Loading cohort data: cohort={args.cohort}, predictor={args.predictor}")

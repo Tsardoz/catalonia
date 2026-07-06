@@ -110,6 +110,12 @@ python src/dun_rainfed_fraction.py
 # DUN cultivar-share whitelist for a given crop / regime / cultivar
 python src/dun_cultivar_fraction.py --crop olive --regime S --cultivar ARBEQUINA \
     --campaign 2024 --threshold 0.90 --min-cult-ha 500 --input data/dun/olives.csv
+
+# Multi-crop parcel-level DUN extraction + AgERA5 grid-cell spatial join (wine grape,
+# almond, hazelnut, cherry, peach, flat peach, corn, oats, wheat, soybean) -- same
+# source portal as olives.csv, queried live over its API. See WARP.md's "Multi-Crop
+# DUN Parcel Data" section for the full crop list and output schema.
+python src/fetch_dun_crops.py --all
 ```
 
 Prior sliding-window OLS and elastic-net analyses have been retired to
@@ -235,6 +241,8 @@ analyses that filter on `yield_tha > 0` are unaffected.
 | dun/comarca_arbequina_whitelist.csv | <1KB | Tracked (10 comarques where Arbequina is ≥90% of rainfed olive area AND ≥500 ha; headline rainfed cultivar subset) |
 | dun/comarca_irrigated_arbequina_whitelist.csv | <1KB | Tracked (8 comarques where Arbequina is ≥90% of *irrigated* olive area AND ≥200 ha; irrigated sign-test subset) |
 | dun/comarca_olive_rainfed_fraction.csv | 3KB | Tracked (DUN rainfed-fraction per comarca) |
+| dun/{crop}.csv | varies (up to ~690MB) | **GITIGNORED** (raw parcel extracts for vinya, ametller, avellaner, cirerer, presseguer, pressec_pla, blat_de_moro, civada, blat_tou, blat_dur, soia; regenerate with `fetch_dun_crops.py`) |
+| dun/{crop}_dun_grid_cells[_YYYY].csv | <30KB each | Tracked (per-crop AgERA5 grid-cell area weights; see WARP.md) |
 
 ## Documentation
 

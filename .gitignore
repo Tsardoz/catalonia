@@ -19,6 +19,21 @@ data/download_agera5.log
 data/dun/olives.csv
 data/dun/raw/
 
+# Raw DUN parcel-level extracts for other crops (large, regenerable via
+# src/fetch_dun_crops.py). The small derived *_dun_grid_cells*.csv weight
+# tables stay tracked.
+data/dun/vinya.csv
+data/dun/ametller.csv
+data/dun/avellaner.csv
+data/dun/cirerer.csv
+data/dun/presseguer.csv
+data/dun/pressec_pla.csv
+data/dun/blat_de_moro.csv
+data/dun/civada.csv
+data/dun/blat_tou.csv
+data/dun/blat_dur.csv
+data/dun/soia.csv
+
 # Cached map overlays (regenerable)
 data/osm/
 data/ne/
